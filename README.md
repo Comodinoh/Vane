@@ -3,6 +3,12 @@
 
 If you want to see the past archived version of this repository, check out the [old](https://github.com/Comodinoh/GCrisp/tree/old) branch.
 
+# Goals
+- Redesign and refactor the RenderAPI for better readability
+- Redesign the application integration, API and loop
+- Memory tracing and tracking
+- Multithreading and command queue
+
 # Usage
 ## Linux
 __Note:__ CMake >= 3.30.4 required
