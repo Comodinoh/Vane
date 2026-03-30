@@ -150,7 +150,7 @@ class VertexBuffer {
     virtual const BufferLayout& GetLayout() const = 0;
     virtual void SetLayout(const BufferLayout& layout) = 0;
 
-    VANE_GRAPHICS_CREATE_DECL_WITH_SPEC(VertexBuffer)
+    static VertexBuffer* Create(const VertexBufferSpecification& spec);
 };
 
 class IndexBuffer {
@@ -162,6 +162,6 @@ class IndexBuffer {
 
     inline virtual uint32_t GetCount() const = 0;
 
-    VANE_GRAPHICS_CREATE_DECL_WITH_SPEC(IndexBuffer)
+    static IndexBuffer* Create(const IndexBufferSpecification& spec);
 };
 } // namespace Vane::Graphics

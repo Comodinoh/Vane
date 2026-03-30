@@ -8,6 +8,8 @@
 #define VANE_BIND_FN1(func) std::bind(&func, this, std::placeholders::_1)
 #define VANE_CONCAT(x, y) x##y
 
+#define VANE_TODO(x) VANE_ERROR("TODO: {0}", x)
+
 #ifndef VANE_RELEASE
 
 #if defined(VANE_WIN32)
