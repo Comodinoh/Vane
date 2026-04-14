@@ -1,4 +1,5 @@
 #include "Application.h"
+#include <chrono>
 #include <gcpch.h>
 
 #include <Vane/Core/GWindow.h>
