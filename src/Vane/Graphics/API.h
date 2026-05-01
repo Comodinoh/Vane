@@ -25,24 +25,28 @@ namespace Vane::Graphics {
     };
 
     struct WindowSpecification {
+        Backend backend;
         uint width;
         uint height;
         std::string title;
-
+        bool vsync = true;
     };
 
-    static Backend s_Backend = Backend::None; 
+    static Backend s_backend = Backend::None; 
 
     static inline Backend GetBackend() {
-        return s_Backend;
+        return s_backend;
     }
 
     class Window : public GraphicsObject{
         public:
-            virtual const WindowInfo& GetInfo() = 0; 
+            virtual const WindowInfo& GetInfo() const = 0; 
+
             virtual void SetVSync(bool enabled) = 0;
+            virtual bool IsVSync() const = 0;
 
             virtual void Update() = 0;
+
 
             // The implementation of this static method is 
             // in platform/Desktop/Linux or platform/Desktop/Windows directory

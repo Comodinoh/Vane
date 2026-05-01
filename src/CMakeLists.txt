@@ -10,7 +10,6 @@ set(VANE_SOURCES
         Vane/Core/CameraController.h
         Vane/Core/Core.cpp
         Vane/Core/Core.h
-        Vane/Core/GWindow.h
         Vane/Core/Input.h
         Vane/Core/Layer.cpp
         Vane/Core/Layer.h
@@ -32,27 +31,7 @@ set(VANE_SOURCES
         Vane/Events/Event.h
         Vane/Events/KeyEvent.h
         Vane/Events/MouseEvent.h
-        Vane/Renderer/Buffer.cpp
-        Vane/Renderer/Buffer.h
-        Vane/Renderer/Camera.h
-        Vane/Renderer/Context.cpp
-        Vane/Renderer/Context.h
-        Vane/Renderer/OrthoCamera.cpp
-        Vane/Renderer/OrthoCamera.h
-        Vane/Renderer/Renderer.cpp
-        Vane/Renderer/Renderer.h
-        Vane/Renderer/Renderer2D.cpp
-        Vane/Renderer/Renderer2D.h
-        Vane/Renderer/RendererBase.h
-        Vane/Renderer/Shader.cpp
-        Vane/Renderer/Shader.h
-        Vane/Renderer/SubTexture.cpp
-        Vane/Renderer/SubTexture.h
-        Vane/Renderer/Texture.cpp
-        Vane/Renderer/Texture.h
-        Vane/Renderer/Utils.h
-        Vane/Renderer/VertexArray.cpp
-        Vane/Renderer/VertexArray.h
+        Vane/Graphics/API.h
         Vane/Vane.h
 )
 
