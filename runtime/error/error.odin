@@ -1,4 +1,4 @@
-package Core
+package Error
 
 Error :: struct {
     message: string,
