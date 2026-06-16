@@ -3,8 +3,9 @@ package Core
 import gfx "vane:graphics"
 import gl  "vane:platform/opengl"
 
-Create_Window_Proc :: proc(spec: Window_Spec) -> (Window, Window_Error);
-Window_Init_Proc   :: proc(spec: ^gl.Window_Ctx);
+Create_Window_Proc  :: proc(spec: Window_Spec) -> (Window, Maybe(Error));
+Window_Init_Proc    :: proc(spec: ^gl.Window_Ctx);
+Window_Destroy_Proc :: proc(spec: ^gl.Window_Ctx);
 
 Window :: struct {
     ctx: Window_Ctx,
@@ -16,7 +17,8 @@ Window_Ctx :: struct {
 }
 
 Window_VTable :: struct {
-    init: Window_Init_Proc
+    init:       Window_Init_Proc,
+    destroy:    Window_Destroy_Proc
 }
 
 Window_Spec :: struct {
@@ -30,7 +32,7 @@ Window_Spec :: struct {
 
 when ODIN_OS == .Linux {
     create_window :: proc(backend: gfx.Backend, title: string = "Vane Game", 
-        width: int = 1280, height: int = 720) -> (Window, Window_Error){
+        width: int = 1280, height: int = 720) -> (Window, Maybe(Error)){
         #partial switch backend {
         case .OpenGL: {
             when gfx.OPENGL {
@@ -41,14 +43,15 @@ when ODIN_OS == .Linux {
                       height = height
                   },
                   vtable = {
-                      gl.init_window
+                      gl.init_window,
+                      gl.destroy_window
                   }
               }, nil
             }
             fallthrough
         }
         case: {
-            return {}, Invalid_Backend{"Unknown graphics backend"};
+            return {}, Error{"Unknown graphics backend"};
         }
        } 
     }

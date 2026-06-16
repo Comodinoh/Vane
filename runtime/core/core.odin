@@ -1,5 +1,6 @@
 package Core
 
+import "core:fmt"
 NAME :: #config(VANE_NAME, "Vane")
 VERSION :: #config(VANE_VERSION, "0.0.1-BETA")
 
@@ -20,15 +21,10 @@ App_State :: struct {
 
 Engine_State :: struct {
     running: bool,
-     
-
 }
 
 @(private)
 global_backend : gfx.Backend
-
-
-
 
 init :: proc(state: ^App_State, 
     start: App_Proc, 
@@ -46,31 +42,36 @@ init :: proc(state: ^App_State,
     state.engine = Engine_State{ running=true }
 }
 
-init_app :: proc(state: ^App_State) {
-    err : Window_Error = nil
-    state.window, err = create_window(global_backend)
+init_app :: proc(state: ^App_State) -> Maybe(Error) {
+    state.running = true;
 
-    assert(err == nil, "There has been an error with window creation")
+    state.window = create_window(global_backend) or_return
     
     state.window.vtable.init(&state.window.ctx);
+
+    return nil;
 }
 
 destroy_app :: proc(state: ^App_State) {
-    //TODO: destroy window
+    state.window.vtable.destroy(&state.window.ctx)
 }
 
 run :: proc(state: ^App_State) {
     engine: {
         for state.engine.running {
-            init_app(state);
+            if err := init_app(state); err != nil {
+                fmt.eprintln("Error: Could not initialise application");
+                fmt.eprintfln("      Reason: {}", err.(Error).message);
+                break engine;
+            }
 
-            if(!state->start()) {
+            if !state->start() {
                 return
             }
 
             for state.running {
                 if(!state->update()) {
-                    break engine;
+                    break;
                 }
             }
 

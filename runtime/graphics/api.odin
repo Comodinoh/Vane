@@ -4,6 +4,7 @@ OPENGL :: #config(VANE_OPENGL, true)
 VULKAN :: #config(VANE_OPENGL, false)
 
 Backend :: enum {
+    None = 0,
     OpenGL,
     Vulkan,
     Headless
