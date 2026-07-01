@@ -5,7 +5,7 @@
 
 namespace Vane::Graphics::OpenGL {
     
-    Context::Context(void* windowHandle) : m_handle(windowHandle) {
+    Context::Context(void* windowHandle) : m_handle{._p = windowHandle} {
         GLFWwindow* window = static_cast<GLFWwindow*>(windowHandle);
 
         glfwMakeContextCurrent(window);
@@ -14,8 +14,12 @@ namespace Vane::Graphics::OpenGL {
         );
     }
 
+    const Graphics::Handle& Context::GetHandle() {
+        return m_handle;
+    }
+
     void Context::SwapBuffers() {
-        glfwSwapBuffers(static_cast<GLFWwindow*>(m_handle));
+        glfwSwapBuffers(static_cast<GLFWwindow*>(m_handle._p));
     }
 
 }

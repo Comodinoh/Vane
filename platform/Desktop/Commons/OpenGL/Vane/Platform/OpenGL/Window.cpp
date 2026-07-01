@@ -26,11 +26,11 @@ namespace Vane::Graphics::OpenGL {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-        VANE_CORE_VERIFY(m_handle = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr), 
+        VANE_CORE_VERIFY(m_handle._p = glfwCreateWindow(spec.width, spec.height, spec.title.c_str(), nullptr, nullptr), 
             "Could not create glfw window"
         );
 
-        m_context = new OpenGL::Context();
+        m_context = new Context(m_handle._p);
 
         if(spec.vsync) {
            glfwSwapInterval(1); 
@@ -41,7 +41,7 @@ namespace Vane::Graphics::OpenGL {
         //TODO: Implement all callbacks
     }
 
-    void* Window::GetHandle() {
+    const Graphics::Handle& Window::GetHandle() {
         return m_handle;
     }
 
