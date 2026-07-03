@@ -1,6 +1,7 @@
 #ifndef VANE_GRAPHICS_OPENGL_H
 #define VANE_GRAPHICS_OPENGL_H
 
+#include "Vane/Utils/Aliases.h"
 #include <Vane/Graphics/API2.h>
 #include <cstddef>
 #include <glad/glad.h>
@@ -9,6 +10,7 @@ namespace Vane::Graphics::OpenGL {
     enum class LoadingOpcode : u8 {
         CreateTexture = 0,
         CreateShader,
+        CreatePipeline,
     };
 
     enum class CommandOpcode : u8 {
@@ -20,7 +22,7 @@ namespace Vane::Graphics::OpenGL {
     };
 
     struct TextureData {
-        TextureHandle       handle;
+        GLint               gl_handle;
         TextureDimension    dimension;
         TextureDataFormat   data_format;
         TextureColorFormat  color_format;
@@ -28,13 +30,29 @@ namespace Vane::Graphics::OpenGL {
     };
 
     struct ShaderData {
-        ShaderHandle handle;
-        usz count;
+        GLint        gl_handle;
+        ShaderType   type;
+        usz          size;
     };
 
-    struct ShaderElementData {
-        ShaderType  type;
-        usz         length;
+    struct PipelineData {
+        ShaderHandle vertex_shader;
+        ShaderHandle pixel_shader;
+    };
+
+    struct CreateTextureData {
+        TextureHandle handle;
+        TextureData   data;
+    };
+
+    struct CreateShaderData {
+        ShaderHandle handle;
+        ShaderData   data;
+    };
+
+    struct CreatePipelineData {
+        PipelineHandle handle;
+        PipelineData   data;
     };
 
     inline usz GetAlignedOffset(usz offset, usz alignment) {
@@ -42,57 +60,6 @@ namespace Vane::Graphics::OpenGL {
 
         return (offset + mask) & ~mask;
     }
-
-    class ResourceLoadingQueue {
-        public:
-            void PushTexture(TextureHandle texture,
-                const TextureSpecification& spec);
-            void PushShader(ShaderHandle handle,
-                const ShaderSpecification& spec);
-
-            inline const u8* Data() const {
-                return m_buffer.data();
-            }
-
-            inline void Align(usz alignment) {
-                usz size = m_buffer.size();
-                usz aligned_size = GetAlignedOffset(size, alignment);
-
-                if(aligned_size > size) {
-                    m_buffer.resize(aligned_size, 0);
-                }
-            }
-        private:
-            std::vector<u8> m_buffer;
-    };
-
-    class CommandQueue {
-        public:
-            template<typename T>
-            T& PushCommand(CommandOpcode opcode) {
-                m_buffer.push_back(static_cast<u8>(opcode));
-
-                usz offset = m_buffer.size();
-                Align(alignof(T));
-
-                m_buffer.resize(offset + sizeof(T));
-                
-                Align(alignof(std::max_align_t));
-
-                return reinterpret_cast<T&>(m_buffer[offset]);
-            }
-
-            inline void Align(usz alignment) {
-                usz size = m_buffer.size();
-                usz aligned_size = GetAlignedOffset(size, alignment);
-
-                if(aligned_size > size) {
-                    m_buffer.resize(aligned_size, 0);
-                }
-            }
-        private:
-            std::vector<u8> m_buffer;
-    };
 
     template<typename Data>
     class Registry {
@@ -140,10 +107,17 @@ namespace Vane::Graphics::OpenGL {
                 return m_data[m_handle_to_data[slot]];
             }
 
+            const Data& Get(usz slot) const {
+                return m_data[m_handle_to_data[slot]];
+            }
+
             Data& operator[](usz slot) {
                 return Get(slot);
             }
 
+            const Data& operator[](usz slot) const {
+                return Get(slot);
+            }
         private:
             std::vector<usz>    m_handle_to_data;
             std::vector<Data>   m_data;
@@ -153,22 +127,92 @@ namespace Vane::Graphics::OpenGL {
             std::vector<usz> m_freed_slots;
     };
 
-    class CommandPool {
+    class ResourceLoadingQueue {
+        public:
+            void PushTexture(const Registry<TextureData>& registry, TextureHandle texture,
+                const TextureSpecification& spec);
+            void PushShader(const Registry<ShaderData>& registry, ShaderHandle handle,
+                const ShaderSpecification& spec);
+            void PushPipeline(const Registry<PipelineData>& registry, PipelineHandle handle,
+                const PipelineSpecification& spec);
 
+            inline const u8* Data() const {
+                return m_buffer.data();
+            }
+
+            inline void Align(usz alignment) {
+                usz size = m_buffer.size();
+                usz aligned_size = GetAlignedOffset(size, alignment);
+
+                if(aligned_size > size) {
+                    m_buffer.resize(aligned_size, 0);
+                }
+            }
+        private:
+            std::vector<u8> m_buffer;
     };
+
+    class CommandQueue {
+        public:
+            template<typename T>
+            T& PushCommand(CommandOpcode opcode) {
+                m_buffer.push_back(static_cast<u8>(opcode));
+
+                usz offset = m_buffer.size();
+                Align(alignof(T));
+
+                m_buffer.resize(offset + sizeof(T));
+                
+                Align(alignof(std::max_align_t));
+
+                return reinterpret_cast<T&>(m_buffer[offset]);
+            }
+
+            inline void Align(usz alignment) {
+                usz size = m_buffer.size();
+                usz aligned_size = GetAlignedOffset(size, alignment);
+
+                if(aligned_size > size) {
+                    m_buffer.resize(aligned_size, 0);
+                }
+            }
+
+            inline void Reserve(usz bytes) {
+                m_buffer.reserve(bytes);
+            }
+
+            inline void Clear() {
+                m_buffer.clear();
+            }
+        private:
+            std::vector<u8> m_buffer;
+    };
+
+    
 
     class CommandBuffer : public Graphics::CommandBuffer{
         public:
-            inline void BindPipeline(PipelineHandle handle) override {
+            inline virtual void BindPipeline(PipelineHandle handle) override {
                 BindPipelineCommand& cmd = m_queue.PushCommand<BindPipelineCommand>(CommandOpcode::BindPipeline);
                 cmd.handle = handle;
             }
 
-        protected:
-            CommandBuffer() = default;
+            inline virtual void Clear() override {
+                m_queue.Clear();
+            }
 
+            inline CommandQueue& GetQueue() {return m_queue;}
         private:
             CommandQueue m_queue;
+    };
+
+    class CommandPool {
+        public:
+            inline std::vector<CommandBuffer*>& GetFree() {return m_free_buffers;}
+            inline std::vector<CommandBuffer*>& GetAllocated() {return m_free_buffers;}
+        private:
+            std::vector<CommandBuffer*> m_free_buffers;
+            std::vector<CommandBuffer*> m_allocated_buffers;
     };
 
     class Device : public Graphics::Device {
@@ -179,13 +223,15 @@ namespace Vane::Graphics::OpenGL {
             virtual CommandPoolHandle CreateCommandPool() override;
 
             virtual Graphics::CommandBuffer* AllocateCommandBuffer(CommandPoolHandle handle) override;
+            virtual void ResetCommandPool(CommandPoolHandle handle) override;
+
 
             virtual void Submit(Graphics::CommandBuffer* buffer) override;
         private:
-            Registry<TextureSpecification>  m_texture_registry;
-            Registry<ShaderSpecification>   m_shader_registry;
-            Registry<PipelineSpecification> m_pipeline_registry;
-            Registry<CommandPool>           m_command_pool_registry;
+            Registry<TextureData>   m_texture_registry;
+            Registry<ShaderData>    m_shader_registry;
+            Registry<PipelineData>  m_pipeline_registry;
+            Registry<CommandPool*>  m_command_pool_registry;
 
             ResourceLoadingQueue m_loading_queue;
     };

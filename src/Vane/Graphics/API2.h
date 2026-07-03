@@ -4,22 +4,26 @@
 #include <Vane/Utils/Aliases.h>
 
 namespace Vane::Graphics {
+    template<typename T>
+    constexpr auto INVALID_HANDLE = Handle<T>(T{});
 
-    struct TextureHandle {
-        usz id;
+    template<typename T>
+    struct Handle {
+        T id;
+
+        operator T() {
+            return id;
+        }
+
+        inline bool IsValid() const {
+            return id != INVALID_HANDLE<T>.id;
+        }
     };
 
-    struct ShaderHandle {
-        usz id;
-    };
-
-    struct PipelineHandle {
-        usz id;
-    };
-
-    struct CommandPoolHandle {
-        usz id;
-    };
+    struct TextureHandle : Handle<usz>{};
+    struct ShaderHandle : Handle<usz>{};
+    struct PipelineHandle : Handle<usz>{};
+    struct CommandPoolHandle : Handle<usz>{};
 
     enum class ShaderType {
         Vertex,
@@ -29,9 +33,8 @@ namespace Vane::Graphics {
     using ShaderPair = std::pair<ShaderType, std::string>;
 
     struct ShaderSpecification {
-        std::vector<ShaderPair> sources;
-
-        ShaderSpecification(const std::initializer_list<ShaderPair>& list) : sources(list) {}
+        ShaderType  type;
+        std::string source;
     };
 
     enum TextureDimension {
@@ -84,16 +87,14 @@ namespace Vane::Graphics {
     };
 
     struct PipelineSpecification {
-        ShaderHandle vertexShader;
-        ShaderHandle pixelShader;
+        ShaderHandle vertex_shader;
+        ShaderHandle pixel_shader;
     };
 
     class CommandBuffer {
         public:
             virtual void BindPipeline(PipelineHandle handle) = 0;
-
-        protected:
-            ~CommandBuffer() = default;
+            virtual void Clear() = 0;
     };
 
     class Device {
@@ -106,6 +107,7 @@ namespace Vane::Graphics {
             virtual CommandPoolHandle   CreateCommandPool() = 0;
 
             virtual CommandBuffer* AllocateCommandBuffer(CommandPoolHandle handle) = 0;
+            virtual void           ResetCommandPool(CommandPoolHandle handle);
 
             virtual void Submit(CommandBuffer* buffer) = 0;
     };
