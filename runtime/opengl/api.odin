@@ -9,6 +9,7 @@ import "core:mem"
 Loading_Opcode :: enum(u8) {
     CreateTexture = 0,
     CreateShader,
+    CreatePipeline,
 }
 
 Texture_Data :: struct {
@@ -25,14 +26,19 @@ Shader_Data :: struct {
     kind: graphics.Shader_Kind,
 }
 
-Create_Data :: struct($Handle, $Data: typeid) {
-    handle: Handle,
+Pipeline_Data :: struct {
+    vertex_shader, pixel_shader: graphics.Shader_Handle,
+}
+
+@(private)
+Create_Data :: struct($H, $Data: typeid) {
+    handle: H,
     using data: ^Data
 }
 
 Create_Texture_Data :: distinct Create_Data(graphics.Texture_Handle, Texture_Data)
-
 Create_Shader_Data :: distinct Create_Data(graphics.Shader_Handle, Shader_Data)
+Create_Pipeline_Data :: distinct Create_Data(graphics.Pipeline_Handle, Pipeline_Data)
 
 Resource_Loading_Queue :: struct {
     queue:  [dynamic]u8,
@@ -51,6 +57,7 @@ Device_State :: struct {
     allocator: mem.Allocator,
     texture_registry: Registry(Texture_Data),
     shader_registry: Registry(Shader_Data),
+    pipeline_registry: Registry(Pipeline_Data),
     resource_loading_queue: Resource_Loading_Queue,
 }
 
@@ -97,6 +104,15 @@ create_shader :: proc(state: graphics.Device_State, spec: graphics.Shader_Spec) 
     return handle
 }
 
+create_pipeline :: proc(state: graphics.Device_State, spec: graphics.Pipeline_Spec) -> graphics.Pipeline_Handle {
+    state := cast(^Device_State)state
+
+    handle : graphics.Pipeline_Handle = registry_allocate(&state.pipeline_registry, Pipeline_Data{spec.vertex_shader, spec.pixel_shader})
+    resource_push_pipeline(&state.resource_loading_queue, state.pipeline_registry, handle)
+
+    return handle
+}
+
 register :: proc() {
     graphics.register_device_vtable(.OpenGL, {
         new = new,
@@ -108,6 +124,7 @@ register :: proc() {
 
 @(private)
 registry_allocate :: proc(registry: ^$T/Registry($E), data: E) -> int {
+    //TODO: Come up with a better strategy for slot reusing
     slot := registry.next_slot
 
     if len(registry.freed_slots) != 0 {
@@ -213,7 +230,7 @@ resource_push_texture :: proc(queue: ^Resource_Loading_Queue, registry: Registry
 @(private)
 resource_push_shader :: proc(queue: ^Resource_Loading_Queue, registry: Registry(Shader_Data), handle: graphics.Shader_Handle, payload: string) {
     append(&queue.queue, cast(u8)Loading_Opcode.CreateShader)
-    align(&queue.queue, align_of(Create_Texture_Data))
+    align(&queue.queue, align_of(Create_Shader_Data))
 
     data := registry_get(registry, handle.(int))
 
@@ -232,6 +249,26 @@ resource_push_shader :: proc(queue: ^Resource_Loading_Queue, registry: Registry(
     resize(&queue.queue, idx + len(payload))
 
     copy(queue.queue[idx:], transmute([]u8)payload)
+
+    align(&queue.queue, mem.DEFAULT_ALIGNMENT)
+}
+
+@(private)
+resource_push_pipeline :: proc(queue: ^Resource_Loading_Queue, registry: Registry(Pipeline_Data), handle: graphics.Pipeline_Handle) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreatePipeline)
+    align(&queue.queue, align_of(Create_Pipeline_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Pipeline_Data{
+        handle,
+        data,
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
 
     align(&queue.queue, mem.DEFAULT_ALIGNMENT)
 }

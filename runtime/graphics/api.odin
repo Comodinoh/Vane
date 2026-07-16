@@ -51,6 +51,10 @@ Shader_Spec :: struct {
     source: string,
 }
 
+Pipeline_Spec :: struct {
+    vertex_shader, pixel_shader: Shader_Handle
+}
+
 Handle :: union {
     rawptr,
     int
