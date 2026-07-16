@@ -1,53 +1,54 @@
 package Core
 
 import "core:fmt"
+
+
 NAME :: #config(VANE_NAME, "Vane")
 VERSION :: #config(VANE_VERSION, "0.0.1-BETA")
 
+import win   "vane:core/window"
 import error "vane:error"
 import gfx   "vane:graphics"
+import gl    "vane:opengl"
 import crash "vane:crash"
-import win   "vane:core/window"
+
 
 App_Proc :: proc(app: ^App_State) -> bool
 
 App_State :: struct {
     running: bool,
-
-    engine: Engine_State,
     window: win.Window,
-
+    
     start: App_Proc,
     stop: App_Proc,
     update: App_Proc,
 }
 
-Engine_State :: struct {
-    running: bool,
-    window_spec: win.Window_Spec
-}
-
-@(private)
-global_backend : gfx.Backend
-
 report_proc :: proc(state: ^crash.Crash_State) {
     
 }
 
-init :: proc(state: ^App_State, 
+new :: proc( 
     start: App_Proc, 
     stop: App_Proc, 
     update: App_Proc,
     backend := gfx.Backend.OpenGL,
     title: string = "Vane Game", width: int = 1280, height: int = 720,
-    ) -> (err : Maybe(error.Error)){
-    fmt.println("Initialising engine...")
-
-    global_backend = backend
+    ) -> (state: App_State, err : Maybe(error.Error)){
+    fmt.println("Initialising app...")
 
     crash.get_state().report_proc = report_proc;
 
     fmt.println("Initialised crash report system")
+
+    gfx.init(backend) or_return
+
+    when gfx.OPENGL {
+        gl.register()
+        fmt.println("Registered OpenGL graphics API")
+    }
+
+    fmt.println("Registered graphics APIs")
 
     state.running = true
 
@@ -55,70 +56,36 @@ init :: proc(state: ^App_State,
     state.stop = stop
     state.update = update
 
-    state.engine = Engine_State{ running=true, 
-        window_spec = { title = title, width = width, height = height } }
-
-    win.new(&state.window, global_backend, state.engine.window_spec)
+    state.window = win.new(gfx.get_backend(), {title, width, height})
     win.init(&state.window) or_return
-
-    fmt.println("Initialised engine")
-
-    return nil
-}
-
-init_app :: proc(state: ^App_State) -> Maybe(error.Error) {
-    fmt.println("Initialising app...")
-
-    state.running = true;
-
-
 
     fmt.println("Initialised app")
 
-    return nil;
+    return
 }
 
-destroy_app :: proc(state: ^App_State) {
-    fmt.println("Destroying app...")
-    fmt.println("Destroyed app")
+start :: proc(state: ^App_State) -> bool {
+    return state.start(state)
 }
 
-run :: proc(state: ^App_State) {
-    engine: {
-        for state.engine.running && !win.should_close(&state.window){
-            if err := init_app(state); err != nil {
-                fmt.eprintln("Error: Could not initialise application");
-                fmt.eprintfln("      Reason: {}", err.(error.Error).message);
-                break engine;
-            }
+stop :: proc(state: ^App_State) -> bool{
+    return state.stop(state)
+}
 
-            if !state->start() {
-                return
-            }
+update :: proc(state: ^App_State) -> bool {
+    return state.update(state)
+}
 
-            for state.running {
-                if(!state->update()) {
-                    break;
-                }
-            }
-
-            state->stop()
-
-            destroy_app(state);
+run :: proc(state: ^App_State){
+    for !win.should_close(&state.window) {
+        if !update(state){
+            break
         }
     }
 }
 
 destroy :: proc(state: ^App_State) {
-    fmt.println("Destroying engine")
+    fmt.println("Destroying app")
     win.destroy(&state.window)
-}
-
-restart :: proc(state: ^App_State) {
-    state.running = false
-}
-
-stop :: proc(state: ^App_State) {
-    state.running = false
-    state.engine.running = false
+    fmt.println("Destroyed app")
 }

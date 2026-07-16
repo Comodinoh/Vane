@@ -8,10 +8,6 @@ import          "vane:error"
 import gfx      "vane:graphics"
 import glfw     "vendor:glfw"
 
-Create_Window_Proc  :: proc(spec: Window_Spec) -> (Window, Maybe(error.Error));
-Window_Init_Proc    :: proc(ctx: ^Window);
-Window_Destroy_Proc :: proc(ctx: ^Window);
-
 Window :: struct {
     title: string,
 
@@ -30,8 +26,8 @@ Window_Spec :: struct {
     height: int,
 }
 
-new :: proc(win: ^Window, backend: gfx.Backend, spec: Window_Spec){    
-    win^ = Window{title = spec.title, width = spec.width, height = spec.height, backend = backend}
+new :: proc(backend: gfx.Backend, spec: Window_Spec) -> Window{
+    return Window{title = spec.title, width = spec.width, height = spec.height, backend = backend}
 }
 
 init :: proc(win: ^Window) -> ( err : Maybe(error.Error) ){
