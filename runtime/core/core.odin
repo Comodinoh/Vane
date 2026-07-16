@@ -12,29 +12,35 @@ import gfx   "vane:graphics"
 import gl    "vane:opengl"
 import crash "vane:crash"
 
+App_Proc_Struct :: struct($T: typeid) {
+    app_proc: proc(data: ^T, app: ^App_State(T)) -> bool
+}
 
-App_Proc :: proc(app: ^App_State) -> bool
+app_proc :: proc(procedure: proc(data: ^$E, app: ^App_State(E)) -> bool) -> App_Proc_Struct(E){
+    return App_Proc_Struct(E) {procedure}
+}
 
-App_State :: struct {
+App_State :: struct($T: typeid) {
     running: bool,
     window: win.Window,
     
-    start: App_Proc,
-    stop: App_Proc,
-    update: App_Proc,
+    start: App_Proc_Struct(T),
+    stop: App_Proc_Struct(T),
+    update: App_Proc_Struct(T),
+    data: T,
 }
 
 report_proc :: proc(state: ^crash.Crash_State) {
     
 }
 
-new :: proc( 
-    start: App_Proc, 
-    stop: App_Proc, 
-    update: App_Proc,
+new :: proc(
+    start: $T/App_Proc_Struct($E), 
+    stop: T, 
+    update: T,
     backend := gfx.Backend.OpenGL,
     title: string = "Vane Game", width: int = 1280, height: int = 720,
-    ) -> (state: App_State, err : Maybe(error.Error)){
+    ) -> (state: App_State(E), err : Maybe(error.Error)){
     fmt.println("Initialising app...")
 
     crash.get_state().report_proc = report_proc;
@@ -64,19 +70,19 @@ new :: proc(
     return
 }
 
-start :: proc(state: ^App_State) -> bool {
-    return state.start(state)
+start :: proc(state: ^App_State($T)) -> bool {
+    return state.start.app_proc(&state.data, state)
 }
 
-stop :: proc(state: ^App_State) -> bool{
-    return state.stop(state)
+stop :: proc(state: ^App_State($T)) -> bool{
+    return state.stop.app_proc(&state.data, state)
 }
 
-update :: proc(state: ^App_State) -> bool {
-    return state.update(state)
+update :: proc(state: ^App_State($T)) -> bool {
+    return state.update.app_proc(&state.data, state)
 }
 
-run :: proc(state: ^App_State){
+run :: proc(state: ^App_State($T)){
     for !win.should_close(&state.window) {
         if !update(state){
             break
@@ -84,7 +90,7 @@ run :: proc(state: ^App_State){
     }
 }
 
-destroy :: proc(state: ^App_State) {
+destroy :: proc(state: ^App_State($T)) {
     fmt.println("Destroying app")
     win.destroy(&state.window)
     fmt.println("Destroyed app")

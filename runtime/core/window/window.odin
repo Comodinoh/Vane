@@ -30,7 +30,7 @@ new :: proc(backend: gfx.Backend, spec: Window_Spec) -> Window{
     return Window{title = spec.title, width = spec.width, height = spec.height, backend = backend}
 }
 
-init :: proc(win: ^Window) -> ( err : Maybe(error.Error) ){
+init :: proc(win: ^Window) -> (err : Maybe(error.Error)){
     if !bool(glfw.Init()) {
         desc, code := glfw.GetError()
         return error.Error{ 

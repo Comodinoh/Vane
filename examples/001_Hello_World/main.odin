@@ -8,27 +8,33 @@ import vane "vane:core"
 import win  "vane:core/window"
 import gfx  "vane:graphics"
 
+Data :: struct {
+    device: gfx.Device_State,
+}
 
 main :: proc() {
-    app : vane.App_State
+    app: vane.App_State(Data)
 
     err : Maybe(error.Error)
 
     if app, err = vane.new(backend = gfx.Backend.OpenGL,
-        start = proc(app: ^vane.App_State) -> bool {
+        start = vane.app_proc(proc(data: ^Data, app: ^vane.App_State(Data)) -> bool {
             fmt.println("Starting...")
+
+            data.device = gfx.device_new()
             return true
-        },
-        stop = proc(app: ^vane.App_State) -> bool {
+        }),
+        stop = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
             fmt.println("Stopping...")
+            gfx.device_destroy(data.device)
             return true
-        },
-        update = proc(app: ^vane.App_State) -> bool {
+        }),
+        update = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
             win.poll_events()
 
             win.swap_buffers(&app.window)
             return !win.should_close(&app.window)
-        },
+        }),
     ); err != nil {
         fmt.eprintln("Could not initialise engine")
         fmt.eprintfln("      Reason: {}", err.(error.Error).message)
