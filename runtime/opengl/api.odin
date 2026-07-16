@@ -11,19 +11,6 @@ Loading_Opcode :: enum(u8) {
     CreateShader,
 }
 
-Resource_Loading_Queue :: struct {
-    queue:  [dynamic]u8,
-}
-
-Registry :: struct($T: typeid) {
-    handle_to_data: [dynamic]int,
-    data: [dynamic]T,
-    data_to_handle: [dynamic]int,
-
-    next_slot: int,
-    freed_slots: [dynamic]int,
-}
-
 Texture_Data :: struct {
     gl_handle: i32,
     dimension: graphics.Texture_Dimension,
@@ -47,134 +34,20 @@ Create_Texture_Data :: distinct Create_Data(graphics.Texture_Handle, Texture_Dat
 
 Create_Shader_Data :: distinct Create_Data(graphics.Shader_Handle, Shader_Data)
 
-@(private)
-registry_allocate :: proc(registry: ^$T/Registry($E), data: E) -> int {
-    slot := registry.next_slot
-
-    if len(registry.freed_slots) != 0 {
-        slot = pop(&registry.freed_slots)
-    } else {
-        registry.next_slot += 1
-    }
-
-    if len(registry.handle_to_data) <= slot {
-        resize(&registry.handle_to_data, slot+1)
-    }
-
-    append(&registry.data, data)
-    append(&registry.data_to_handle, slot)
-
-    registry.handle_to_data[slot] = len(registry.data)-1
-
-    return slot
+Resource_Loading_Queue :: struct {
+    queue:  [dynamic]u8,
 }
 
-@(private)
-registry_free :: proc(registry: $T/Registry($E), slot: int) {
-    idx := registry.handle_to_data[slot]
-    size := len(registry.data)
+Registry :: struct($T: typeid) {
+    handle_to_data: [dynamic]int,
+    data: [dynamic]T,
+    data_to_handle: [dynamic]int,
 
-    registry.data[idx] = registry.data[size-1]
-    registry.data_to_handle[idx] = registry.data_to_handle[size-1]
-
-    swapped := data_to_handle[size-1]
-
-    registry.handle_to_data[swapped] = idx
-
-    pop(registry.data)
-    pop(registry.data_to_handle)
-
-    append(&registry.freed_slots, slot)
-}
-
-registry_get :: proc(registry: $T/Registry($E), slot: int) -> ^E {
-    return &registry.data[registry.handle_to_data[slot]]
-}
-
-align :: proc(array: ^$T/[dynamic]$E, alignment: int) {
-    aligned := mem.align_forward_int(len(array), alignment)
-
-    if aligned > len(array) {
-        resize(array, aligned)
-    }
-}
-
-@(private)
-get_data_size :: proc(data_fmt: graphics.Texture_Data_Format) -> int {
-    switch data_fmt {
-    case .Float: 
-        return size_of(f32)
-    case .UnsignedByte:
-        return size_of(u8)
-    }
-    return 0
-}
-
-@(private)
-get_color_size :: proc(color_fmt: graphics.Texture_Color_Format) -> int {
-    switch color_fmt {
-    case .RGB: 
-        return 3
-    case .RGBA:
-        return 4
-    }
-    return 0
-}
- 
-resource_push_texture :: proc(queue: ^Resource_Loading_Queue, registry: Registry(Texture_Data), handle: graphics.Texture_Handle, payload: rawptr) {
-    append(&queue.queue, cast(u8)Loading_Opcode.CreateTexture)
-    align(&queue.queue, align_of(Create_Texture_Data))
-
-    data := registry_get(registry, handle.(int))
-
-    create_data := Create_Texture_Data{
-        handle,
-        data
-    }
-
-    idx := len(queue.queue)
-
-    resize(&queue.queue, idx + size_of(create_data))
-    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
-     
-    idx += size_of(create_data)
-
-    total_size := (get_color_size(data.color_format) + get_data_size(data.data_format)) * data.vertices
-
-    resize(&queue.queue, idx + total_size)
-
-    copy(queue.queue[idx:], slice.from_ptr(transmute(^u8)payload, total_size))
-
-    align(&queue.queue, mem.DEFAULT_ALIGNMENT)
-}
-
-resource_push_shader :: proc(queue: ^Resource_Loading_Queue, registry: Registry(Shader_Data), handle: graphics.Shader_Handle, payload: string) {
-    append(&queue.queue, cast(u8)Loading_Opcode.CreateShader)
-    align(&queue.queue, align_of(Create_Texture_Data))
-
-    data := registry_get(registry, handle.(int))
-
-    create_data := Create_Shader_Data{
-        handle,
-        data
-    }
-
-    idx := len(queue.queue)
-
-    resize(&queue.queue, idx + size_of(create_data))
-    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
-     
-    idx += size_of(create_data)
-
-    resize(&queue.queue, idx + len(payload))
-
-    copy(queue.queue[idx:], transmute([]u8)payload)
-
-    align(&queue.queue, mem.DEFAULT_ALIGNMENT)
+    next_slot: int,
+    freed_slots: [dynamic]int,
 }
 
 Device_State :: struct {
-    test: int,
     allocator: mem.Allocator,
     texture_registry: Registry(Texture_Data),
     shader_registry: Registry(Shader_Data),
@@ -231,4 +104,134 @@ register :: proc() {
         init = init,
         deinit = deinit,
     })
+}
+
+@(private)
+registry_allocate :: proc(registry: ^$T/Registry($E), data: E) -> int {
+    slot := registry.next_slot
+
+    if len(registry.freed_slots) != 0 {
+        slot = pop(&registry.freed_slots)
+    } else {
+        registry.next_slot += 1
+    }
+
+    if len(registry.handle_to_data) <= slot {
+        resize(&registry.handle_to_data, slot+1)
+    }
+
+    append(&registry.data, data)
+    append(&registry.data_to_handle, slot)
+
+    registry.handle_to_data[slot] = len(registry.data)-1
+
+    return slot
+}
+
+@(private)
+registry_free :: proc(registry: $T/Registry($E), slot: int) {
+    idx := registry.handle_to_data[slot]
+    size := len(registry.data)
+
+    registry.data[idx] = registry.data[size-1]
+    registry.data_to_handle[idx] = registry.data_to_handle[size-1]
+
+    swapped := data_to_handle[size-1]
+
+    registry.handle_to_data[swapped] = idx
+
+    pop(registry.data)
+    pop(registry.data_to_handle)
+
+    append(&registry.freed_slots, slot)
+}
+
+@(private)
+registry_get :: proc(registry: $T/Registry($E), slot: int) -> ^E {
+    return &registry.data[registry.handle_to_data[slot]]
+}
+
+@(private)
+align :: proc(array: ^$T/[dynamic]$E, alignment: int) {
+    aligned := mem.align_forward_int(len(array), alignment)
+
+    if aligned > len(array) {
+        resize(array, aligned)
+    }
+}
+
+@(private)
+get_data_size :: proc(data_fmt: graphics.Texture_Data_Format) -> int {
+    switch data_fmt {
+    case .Float: 
+        return size_of(f32)
+    case .UnsignedByte:
+        return size_of(u8)
+    }
+    return 0
+}
+
+@(private)
+get_color_size :: proc(color_fmt: graphics.Texture_Color_Format) -> int {
+    switch color_fmt {
+    case .RGB: 
+        return 3
+    case .RGBA:
+        return 4
+    }
+    return 0
+}
+
+@(private)
+resource_push_texture :: proc(queue: ^Resource_Loading_Queue, registry: Registry(Texture_Data), handle: graphics.Texture_Handle, payload: rawptr) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateTexture)
+    align(&queue.queue, align_of(Create_Texture_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Texture_Data{
+        handle,
+        data
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+     
+    idx += size_of(create_data)
+
+    total_size := (get_color_size(data.color_format) + get_data_size(data.data_format)) * data.vertices
+
+    resize(&queue.queue, idx + total_size)
+
+    copy(queue.queue[idx:], slice.from_ptr(transmute(^u8)payload, total_size))
+
+    align(&queue.queue, mem.DEFAULT_ALIGNMENT)
+}
+
+@(private)
+resource_push_shader :: proc(queue: ^Resource_Loading_Queue, registry: Registry(Shader_Data), handle: graphics.Shader_Handle, payload: string) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateShader)
+    align(&queue.queue, align_of(Create_Texture_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Shader_Data{
+        handle,
+        data
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+     
+    idx += size_of(create_data)
+
+    resize(&queue.queue, idx + len(payload))
+
+    copy(queue.queue[idx:], transmute([]u8)payload)
+
+    align(&queue.queue, mem.DEFAULT_ALIGNMENT)
 }
