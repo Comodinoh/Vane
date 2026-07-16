@@ -1,12 +1,12 @@
 package HelloWorld
 
 import "core:os"
-import "vane:error"
 import "core:fmt"
 
 import vane "vane:core"
 import win  "vane:core/window"
 import gfx  "vane:graphics"
+import      "vane:error"
 
 Data :: struct {
     device: gfx.Device_State,
