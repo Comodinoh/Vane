@@ -114,6 +114,14 @@ create_shader :: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle {
     return DEVICE_VTABLE[CURRENT_BACKEND].create_shader(state, spec)
 }
 
+create_pipeline :: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Handle {
+    return DEVICE_VTABLE[CURRENT_BACKEND].create_pipeline(state, spec)
+}
+
+create_command_pool :: proc(state: Device_State) -> Command_Pool_Handle {
+    return DEVICE_VTABLE[CURRENT_BACKEND].create_command_pool(state)
+}
+
 bind_pipeline :: proc(buffer: Command_Buffer_State, handle: Pipeline_Handle) {
     COMMAND_BUFFER_VTABLE[CURRENT_BACKEND].bind_pipeline(buffer, handle)
 }

@@ -66,7 +66,6 @@ new :: proc(
     win.init(&state.window) or_return
 
     fmt.println("Initialised app")
-
     return
 }
 

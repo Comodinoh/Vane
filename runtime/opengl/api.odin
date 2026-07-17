@@ -194,6 +194,12 @@ reset_command_pool :: proc(state: graphics.Device_State, pool: graphics.Command_
     clear(&pool_data.allocated_buffers)
 }
 
+bind_pipeline :: proc(buffer: graphics.Command_Buffer_State, handle: graphics.Pipeline_Handle) {
+    buffer := cast(^Command_Buffer_State)buffer
+    data := command_buffer_push_command(buffer, .BindPipeline, Bind_Pipeline_Data)
+    data.handle = handle
+}
+
 register :: proc() {
     graphics.register_device_vtable(.OpenGL, {
         new = new,
@@ -208,6 +214,9 @@ register :: proc() {
 
         allocate_command_buffer = allocate_command_buffer,
         reset_command_pool = reset_command_pool,
+    })
+    graphics.register_command_buffer_vtable(.OpenGL, {
+        bind_pipeline = bind_pipeline
     })
 }
 
@@ -389,6 +398,22 @@ command_buffer_init :: proc(state: ^Device_State, buffer: ^Command_Buffer_State)
     buffer.buffer = make([dynamic]u8, 0, DEFAULT_COMMAND_BUFFER_SIZE, state.allocator)
 }
 
+@(private)
 command_buffer_clear :: proc(buffer: ^Command_Buffer_State) {
     clear(&buffer.buffer)
+}
+
+@(private)
+command_buffer_push_command :: proc(buffer: ^Command_Buffer_State, opcode: Command_Opcode, $T: typeid) -> ^T{
+    append(&buffer.buffer, cast(u8)opcode)
+
+    align(&buffer.buffer, align_of(T))
+
+    idx := len(buffer.buffer)
+
+    resize(&buffer.buffer, idx + size_of(T))
+
+    align(&buffer.buffer, mem.DEFAULT_ALIGNMENT)
+
+    return transmute(^T)&buffer.buffer[idx]
 }
