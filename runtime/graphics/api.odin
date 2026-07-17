@@ -66,6 +66,13 @@ Pipeline_Handle :: distinct Handle
 Command_Pool_Handle :: distinct Handle
 
 Device_State :: rawptr
+Command_Buffer_State :: rawptr
+
+Command_Buffer :: struct {
+    bind_pipeline: proc(state: Command_Buffer_State, pipeline: Pipeline_Handle),
+
+    clear: proc(state: Command_Buffer_State),
+}
 
 Device :: struct {
     new: proc(allocator := context.allocator) -> Device_State,
@@ -76,7 +83,11 @@ Device :: struct {
 
     create_texture: proc(state: Device_State, spec: Texture_Spec) -> Texture_Handle,
     create_shader: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle,
-    create_pipeline: proc(state: Device_State) -> Pipeline_Handle,
+    create_pipeline: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Handle,
+    create_command_pool: proc(state: Device_State) -> Command_Pool_Handle,
+
+    allocate_command_buffer: proc(state: Device_State, pool: Command_Pool_Handle) -> Command_Buffer_State,
+    reset_command_pool: proc(state: Device_State, pool: Command_Pool_Handle),
 }
 
 device_new :: proc(allocator := context.allocator) -> Device_State {
@@ -103,8 +114,18 @@ create_shader :: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle {
     return DEVICE_VTABLE[CURRENT_BACKEND].create_shader(state, spec)
 }
 
+bind_pipeline :: proc(buffer: Command_Buffer_State, handle: Pipeline_Handle) {
+    COMMAND_BUFFER_VTABLE[CURRENT_BACKEND].bind_pipeline(buffer, handle)
+}
+
+command_buffer_clear :: proc(buffer: Command_Buffer_State, handle: Pipeline_Handle) {
+    COMMAND_BUFFER_VTABLE[CURRENT_BACKEND].clear(buffer)
+}
+
 @(private)
 DEVICE_VTABLE: [Backend]Device
+@(private)
+COMMAND_BUFFER_VTABLE: [Backend]Command_Buffer
 @(private)
 CURRENT_BACKEND: Backend = nil
 
@@ -152,4 +173,8 @@ init :: proc(backend: Backend) -> Maybe(error.Error){
 
 register_device_vtable :: proc(backend: Backend, dev: Device) {
     DEVICE_VTABLE[backend] = dev
+}
+
+register_command_buffer_vtable :: proc(backend: Backend, command_buffer: Command_Buffer) {
+    COMMAND_BUFFER_VTABLE[backend] = command_buffer
 }

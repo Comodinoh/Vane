@@ -6,10 +6,17 @@ import "core:container/queue"
 import "vane:graphics"
 import "core:mem"
 
+DEFAULT_COMMAND_BUFFER_SIZE :: 2 * 1024 * 1024
+DEFAULT_COMMAND_POOL_SIZE :: 10
+
 Loading_Opcode :: enum(u8) {
     CreateTexture = 0,
     CreateShader,
     CreatePipeline,
+}
+
+Command_Opcode :: enum {
+    BindPipeline = 0,
 }
 
 Texture_Data :: struct {
@@ -28,6 +35,15 @@ Shader_Data :: struct {
 
 Pipeline_Data :: struct {
     vertex_shader, pixel_shader: graphics.Shader_Handle,
+}
+
+Command_Pool_Data :: struct {
+    free_buffers: [dynamic]^Command_Buffer_State,
+    allocated_buffers: [dynamic]^Command_Buffer_State,
+}
+
+Bind_Pipeline_Data :: struct {
+    handle: graphics.Pipeline_Handle,
 }
 
 @(private)
@@ -58,7 +74,12 @@ Device_State :: struct {
     texture_registry: Registry(Texture_Data),
     shader_registry: Registry(Shader_Data),
     pipeline_registry: Registry(Pipeline_Data),
+    command_pool_registry: Registry(Command_Pool_Data),
     resource_loading_queue: Resource_Loading_Queue,
+}
+
+Command_Buffer_State :: struct {
+    buffer: [dynamic]u8,
 }
 
 new :: proc(allocator := context.allocator) -> graphics.Device_State {
@@ -74,11 +95,21 @@ destroy :: proc(state: graphics.Device_State) {
 }
 
 init :: proc(state: graphics.Device_State) {
-    //TODO: init
+    state := cast(^Device_State)state
+
+    registry_init(&state.texture_registry, state.allocator)
+    registry_init(&state.shader_registry, state.allocator)
+    registry_init(&state.pipeline_registry, state.allocator)
+    registry_init(&state.command_pool_registry, state.allocator)
 }
 
 deinit :: proc(state: graphics.Device_State) {
-    //TODO: deinit
+    state := cast(^Device_State)state
+
+    registry_deinit(&state.command_pool_registry)
+    registry_deinit(&state.pipeline_registry)
+    registry_deinit(&state.shader_registry)
+    registry_deinit(&state.texture_registry)
 }
 
 create_texture :: proc(state: graphics.Device_State, spec: graphics.Texture_Spec) -> graphics.Texture_Handle {
@@ -113,13 +144,85 @@ create_pipeline :: proc(state: graphics.Device_State, spec: graphics.Pipeline_Sp
     return handle
 }
 
+create_command_pool :: proc(state: graphics.Device_State) -> graphics.Command_Pool_Handle {
+    state := cast(^Device_State)state
+
+    free_buffers := make([dynamic]^Command_Buffer_State, state.allocator)
+    allocated_buffers := make([dynamic]^Command_Buffer_State, 0, DEFAULT_COMMAND_POOL_SIZE, state.allocator)
+
+    for i in 0..<DEFAULT_COMMAND_POOL_SIZE {
+        buffer, _ := mem.new(Command_Buffer_State, state.allocator)
+        command_buffer_init(state, buffer)
+
+        append(&allocated_buffers, buffer)
+    }
+
+    pool := Command_Pool_Data{free_buffers, allocated_buffers}
+
+    return registry_allocate(&state.command_pool_registry, pool)
+}
+
+allocate_command_buffer :: proc(state: graphics.Device_State, pool: graphics.Command_Pool_Handle) -> graphics.Command_Buffer_State {
+    state := cast(^Device_State)state
+
+    pool_data := registry_get(state.command_pool_registry, pool)
+
+    buf: ^Command_Buffer_State
+
+    if(len(pool_data.free_buffers) != 0) {
+        buf = pop(&pool_data.free_buffers)
+    } else {
+        buf, _ = mem.new(Command_Buffer_State, state.allocator)
+        command_buffer_init(state, buf)
+    }
+
+    append(&pool_data.allocated_buffers, buf)
+
+    return cast(rawptr)buf
+}
+
+reset_command_pool :: proc(state: graphics.Device_State, pool: graphics.Command_Pool_Handle) {
+    state := cast(^Device_State)state
+
+    pool_data := registry_get(state.command_pool_registry, pool)
+
+    for &buf in pool_data.allocated_buffers {
+        command_buffer_clear(buf)
+        append(&pool_data.free_buffers, buf)
+    }
+
+    clear(&pool_data.allocated_buffers)
+}
+
 register :: proc() {
     graphics.register_device_vtable(.OpenGL, {
         new = new,
         destroy = destroy,
         init = init,
         deinit = deinit,
+
+        create_texture = create_texture,
+        create_shader = create_shader,
+        create_pipeline = create_pipeline,
+        create_command_pool = create_command_pool,
+
+        allocate_command_buffer = allocate_command_buffer,
+        reset_command_pool = reset_command_pool,
     })
+}
+
+@(private)
+registry_init :: proc(registry: ^$T/Registry($E), allocator: mem.Allocator) {
+    registry.data = make([dynamic]E)
+    registry.handle_to_data = make([dynamic]int)
+    registry.data_to_handle = make([dynamic]int)
+}
+
+@(private)
+registry_deinit :: proc(registry: ^$T/Registry($E)) {
+    delete(registry.data_to_handle)
+    delete(registry.handle_to_data)
+    delete(registry.data)
 }
 
 @(private)
@@ -164,8 +267,16 @@ registry_free :: proc(registry: $T/Registry($E), slot: int) {
 }
 
 @(private)
-registry_get :: proc(registry: $T/Registry($E), slot: int) -> ^E {
+registry_get :: proc{registry_get_int, registry_get_handle}
+
+@(private)
+registry_get_int :: proc(registry: $T/Registry($E), slot: int) -> ^E {
     return &registry.data[registry.handle_to_data[slot]]
+}
+
+@(private)
+registry_get_handle :: proc(registry: $T/Registry($E), handle: $H/graphics.Handle) -> ^E{
+    return registry_get_int(registry, handle.(int))
 }
 
 @(private)
@@ -243,7 +354,7 @@ resource_push_shader :: proc(queue: ^Resource_Loading_Queue, registry: Registry(
 
     resize(&queue.queue, idx + size_of(create_data))
     copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
-     
+
     idx += size_of(create_data)
 
     resize(&queue.queue, idx + len(payload))
@@ -271,4 +382,13 @@ resource_push_pipeline :: proc(queue: ^Resource_Loading_Queue, registry: Registr
     copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
 
     align(&queue.queue, mem.DEFAULT_ALIGNMENT)
+}
+
+@(private)
+command_buffer_init :: proc(state: ^Device_State, buffer: ^Command_Buffer_State) {
+    buffer.buffer = make([dynamic]u8, 0, DEFAULT_COMMAND_BUFFER_SIZE, state.allocator)
+}
+
+command_buffer_clear :: proc(buffer: ^Command_Buffer_State) {
+    clear(&buffer.buffer)
 }
