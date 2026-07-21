@@ -1,4 +1,4 @@
-package OpenGL
+package Graphics_OpenGL
 
 import "core:strings"
 import "core:slice"
@@ -216,7 +216,8 @@ register :: proc() {
         reset_command_pool = reset_command_pool,
     })
     graphics.register_command_buffer_vtable(.OpenGL, {
-        bind_pipeline = bind_pipeline
+        bind_pipeline = bind_pipeline,
+        clear = command_buffer_clear,
     })
 }
 
@@ -399,7 +400,8 @@ command_buffer_init :: proc(state: ^Device_State, buffer: ^Command_Buffer_State)
 }
 
 @(private)
-command_buffer_clear :: proc(buffer: ^Command_Buffer_State) {
+command_buffer_clear :: proc(buffer: graphics.Command_Buffer_State) {
+    buffer := cast(^Command_Buffer_State)buffer
     clear(&buffer.buffer)
 }
 
@@ -415,5 +417,5 @@ command_buffer_push_command :: proc(buffer: ^Command_Buffer_State, opcode: Comma
 
     align(&buffer.buffer, mem.DEFAULT_ALIGNMENT)
 
-    return transmute(^T)&buffer.buffer[idx]
+    return cast(^T)&buffer.buffer[idx]
 }

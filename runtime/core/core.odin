@@ -9,7 +9,7 @@ VERSION :: #config(VANE_VERSION, "0.0.1-BETA")
 import win   "vane:core/window"
 import error "vane:error"
 import gfx   "vane:graphics"
-import gl    "vane:opengl"
+import gl    "vane:graphics/opengl"
 import crash "vane:crash"
 
 App_Proc_Struct :: struct($T: typeid) {
