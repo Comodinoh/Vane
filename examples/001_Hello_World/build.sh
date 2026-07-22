@@ -1,3 +1,3 @@
 #!/bin/bash
 
-odin build . -collection:vane=../../runtime/
+odin build examples/001_Hello_World/ -collection:vane=runtime/
