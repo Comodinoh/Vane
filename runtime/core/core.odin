@@ -1,16 +1,19 @@
 package Core
 
 import "core:fmt"
+import "core:thread"
+import "core:sync"
 
 
 NAME :: #config(VANE_NAME, "Vane")
 VERSION :: #config(VANE_VERSION, "0.0.1-BETA")
 
-import win   "vane:core/window"
-import error "vane:error"
-import gfx   "vane:graphics"
-import gl    "vane:graphics/opengl"
-import crash "vane:crash"
+import win      "vane:core/window"
+import error    "vane:error"
+import gfx      "vane:graphics"
+import gl       "vane:graphics/opengl"
+import renderer "vane:renderer"
+import crash    "vane:crash"
 
 App_Proc_Struct :: struct($T: typeid) {
     app_proc: proc(data: ^T, app: ^App_State(T)) -> bool
@@ -22,8 +25,10 @@ app_proc :: proc(procedure: proc(data: ^$E, app: ^App_State(E)) -> bool) -> App_
 
 App_State :: struct($T: typeid) {
     running: bool,
-    window: win.Window,
-    
+    device: gfx.Device_State,
+    window: ^win.Window,
+    render_thread: ^thread.Thread,
+    render_thread_data: ^renderer.Render_Thread_Data,
     start: App_Proc_Struct(T),
     stop: App_Proc_Struct(T),
     update: App_Proc_Struct(T),
@@ -63,18 +68,38 @@ new :: proc(
     state.update = update
 
     state.window = win.new(gfx.get_backend(), {title, width, height})
-    win.init(&state.window) or_return
+    win.init(state.window) or_return
+    
+    fmt.println("Initialised window")
 
+    state.device = gfx.device_new()
+    fmt.println("Created device")
+
+
+    state.render_thread, state.render_thread_data = renderer.render_thread_create(state.window) or_return
+    fmt.println("Created render thread")
+    
     fmt.println("Initialised app")
     return
 }
 
 start :: proc(state: ^App_State($T)) -> bool {
+    gfx.device_init(state.device)
+    fmt.println("Initialised device")
+    win.detach_context_current(state.window)
+    thread.start(state.render_thread)
+    fmt.println("Started render thread")
     return state.start.app_proc(&state.data, state)
 }
 
 stop :: proc(state: ^App_State($T)) -> bool{
-    return state.stop.app_proc(&state.data, state)
+    res := state.stop.app_proc(&state.data, state)
+    sync.atomic_store(&state.render_thread_data.running, false)
+    fmt.println("Waiting for render thread to terminate...")
+    thread.join(state.render_thread)
+    gfx.device_deinit(state.device)
+
+    return res
 }
 
 update :: proc(state: ^App_State($T)) -> bool {
@@ -82,15 +107,22 @@ update :: proc(state: ^App_State($T)) -> bool {
 }
 
 run :: proc(state: ^App_State($T)){
-    for !win.should_close(&state.window) {
+    for {
+        assert(state != nil, "app state is nil")
+        if win.should_close(state.window) do break
         if !update(state){
             break
         }
+
+        sync.sema_post(&state.render_thread_data.render_sema)
     }
 }
 
 destroy :: proc(state: ^App_State($T)) {
     fmt.println("Destroying app")
-    win.destroy(&state.window)
+
+    renderer.render_thread_destroy(state.render_thread, state.render_thread_data)
+    gfx.device_destroy(state.device)
+    win.destroy(state.window)
     fmt.println("Destroyed app")
 }

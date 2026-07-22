@@ -1,5 +1,6 @@
 package Graphics_OpenGL
 
+import "core:fmt"
 import "core:strings"
 import "core:slice"
 import "core:container/queue"
@@ -101,6 +102,8 @@ init :: proc(state: graphics.Device_State) {
     registry_init(&state.shader_registry, state.allocator)
     registry_init(&state.pipeline_registry, state.allocator)
     registry_init(&state.command_pool_registry, state.allocator)
+
+    fmt.println("[OpenGL] All registries have been initialised")
 }
 
 deinit :: proc(state: graphics.Device_State) {

@@ -2,6 +2,8 @@ package HelloWorld
 
 import "core:os"
 import "core:fmt"
+import "core:time"
+import "core:mem"
 
 import vane "vane:core"
 import win  "vane:core/window"
@@ -9,7 +11,7 @@ import gfx  "vane:graphics"
 import      "vane:error"
 
 Data :: struct {
-    device: gfx.Device_State,
+    test: string
 }
 
 main :: proc() {
@@ -17,37 +19,56 @@ main :: proc() {
 
     err : Maybe(error.Error)
 
-    if app, err = vane.new(backend = gfx.Backend.OpenGL,
-        start = vane.app_proc(proc(data: ^Data, app: ^vane.App_State(Data)) -> bool {
-            fmt.println("Starting...")
+    when ODIN_DEBUG {
 
-            data.device = gfx.device_new()
-            return true
-        }),
-        stop = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
-            fmt.println("Stopping...")
-            gfx.device_destroy(data.device)
-            return true
-        }),
-        update = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
-            win.poll_events()
+        allocator : mem.Tracking_Allocator
+        mem.tracking_allocator_init(&allocator, context.allocator)
+        context.allocator = mem.tracking_allocator(&allocator);
 
-            win.swap_buffers(&app.window)
-            return !win.should_close(&app.window)
-        }),
-    ); err != nil {
-        fmt.eprintln("Could not initialise engine")
-        fmt.eprintfln("      Reason: {}", err.(error.Error).message)
-        return
+        defer {
+            if len(allocator.allocation_map) > 0 {
+                fmt.eprintfln("=== {} allocations not freed ===", len(allocator.allocation_map))
+                for _, entry in allocator.allocation_map {
+                    fmt.eprintfln("- {} bytes @ {}", entry.size, entry.location)
+                }
+            } else {
+                fmt.eprintfln("All allocations have been freed")
+            }
+            mem.tracking_allocator_destroy(&allocator)
+        }
     }
 
-    defer if err == nil do vane.destroy(&app)
-    
-    vane.start(&app)
+    {
+        if app, err = vane.new(backend = gfx.Backend.OpenGL,
+            start = vane.app_proc(proc(data: ^Data, app: ^vane.App_State(Data)) -> bool {
+                fmt.println("Starting...")
+                return true
+            }),
+            stop = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
+                fmt.println("Stopping...")
+                return true
+            }),
+            update = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
+                win.poll_events()
 
-    vane.run(&app)
+                time.sleep(1)
 
-    vane.stop(&app)
+                return !win.should_close(app.window)
+            }),
+        ); err != nil {
+            fmt.eprintln("Could not initialise engine")
+            fmt.eprintfln("      Reason: {}", err.(error.Error).message)
+            return
+        }
+
+        defer if err == nil do vane.destroy(&app)
+        
+        vane.start(&app)
+
+        vane.run(&app)
+
+        vane.stop(&app)
+    }
 
     
 }
