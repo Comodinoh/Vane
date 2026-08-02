@@ -12,7 +12,9 @@ odin run . -collection:vane=/path/to/vane/runtime
 
 # Documentation
 
-If you want more technical details about the engine or want to document yourself on how to use it, read the [wiki](https://github.com/Comodinoh/Vane/wiki).
+Here is a [Technical Documentation](./docs/) aimed at developers that want to understand how the engine works and/or want to contribute to it.
+
+TBD: User Documentation
 
 
 
