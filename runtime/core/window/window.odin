@@ -61,6 +61,8 @@ init :: proc(win: ^Window) -> (err : Maybe(error.Error)){
     defer if err != nil do glfw.DestroyWindow(glfw_window)
     win.handle = glfw_window 
 
+    make_context_current(win)
+
     return nil
 }
 
@@ -77,16 +79,11 @@ should_close :: proc(win: ^Window) -> bool {
 }
 
 make_context_current :: proc(win: ^Window) {
-    // if win.backend != gfx.Backend.OpenGL {
-    //     return
-    // }
-
     glfw.MakeContextCurrent(glfw.WindowHandle(win.handle))
 }
 
-detach_context_current :: proc(win: ^Window) {
-    // if win.backend != gfx.Backend.OpenGL do return
 
+detach_context_current :: proc(win: ^Window) {
     glfw.MakeContextCurrent(nil)
 }
 
@@ -97,12 +94,10 @@ destroy :: proc(win: ^Window, allocator := context.allocator) {
     free(win, allocator)
 }
 
+set_proc_address :: glfw.gl_set_proc_address
+
 @(private)
 error_callback :: proc "c" (code: i32, desc: cstring) {
     context = runtime.default_context()
     fmt.eprintln("[GLFW] ERROR: ", desc, " (", code, ")")
 }
-
-
-
-

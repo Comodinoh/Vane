@@ -29,6 +29,8 @@ App_State :: struct($T: typeid) {
     window: ^win.Window,
     render_thread: ^thread.Thread,
     render_thread_data: ^renderer.Render_Thread_Data,
+    current_frame: uint,
+    pools: [renderer.FRAMES_IN_FLIGHT]gfx.Command_Pool_Handle,
     start: App_Proc_Struct(T),
     stop: App_Proc_Struct(T),
     update: App_Proc_Struct(T),
@@ -75,8 +77,7 @@ new :: proc(
     state.device = gfx.device_new()
     fmt.println("Created device")
 
-
-    state.render_thread, state.render_thread_data = renderer.render_thread_create(state.window) or_return
+    state.render_thread, state.render_thread_data = renderer.render_thread_create(state.device, state.window) or_return
     fmt.println("Created render thread")
     
     fmt.println("Initialised app")
@@ -86,17 +87,23 @@ new :: proc(
 start :: proc(state: ^App_State($T)) -> bool {
     gfx.device_init(state.device)
     fmt.println("Initialised device")
+
+    state.pools = {gfx.create_command_pool(state.device), gfx.create_command_pool(state.device)}
+
     win.detach_context_current(state.window)
     thread.start(state.render_thread)
     fmt.println("Started render thread")
+
     return state.start.app_proc(&state.data, state)
 }
 
 stop :: proc(state: ^App_State($T)) -> bool{
     res := state.stop.app_proc(&state.data, state)
+
     sync.atomic_store(&state.render_thread_data.running, false)
     fmt.println("Waiting for render thread to terminate...")
     thread.join(state.render_thread)
+
     gfx.device_deinit(state.device)
 
     return res
@@ -110,11 +117,26 @@ run :: proc(state: ^App_State($T)){
     for {
         assert(state != nil, "app state is nil")
         if win.should_close(state.window) do break
+
+        win.poll_events()
+
+        render_data := state.render_thread_data
+
+        frame := &render_data.frames[state.current_frame]
+        gfx.fence_wait(frame.fence)
+
+        pool := &frame.pool
+
+        gfx.reset_command_pool(state.device, pool^)
+
         if !update(state){
             break
         }
 
-        sync.sema_post(&state.render_thread_data.render_sema)
+        sync.sema_post(&render_data.render_sema)
+
+        state.current_frame = (state.current_frame + 1) % renderer.FRAMES_IN_FLIGHT
+
     }
 }
 
@@ -125,4 +147,8 @@ destroy :: proc(state: ^App_State($T)) {
     gfx.device_destroy(state.device)
     win.destroy(state.window)
     fmt.println("Destroyed app")
+}
+
+current_frame_context :: proc(state: ^App_State($T)) -> ^renderer.Frame_Context{
+   return &state.render_thread_data.frames[state.current_frame]
 }
