@@ -1,6 +1,6 @@
 # Overview
 Vane is composed of 2 parts:
-- The runtime (actively developed in `runtime/`)
+- The runtime (actively developed in `runtime/` and written in Odin)
 - The editor (TBD)
 
 ## The Runtime
