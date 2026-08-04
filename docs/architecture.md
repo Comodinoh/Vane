@@ -14,4 +14,4 @@ Those systems are:
 - The Container Utility module (`container`)
 
 The game loop flow is as follows:
-[Architecture Flow Diagram](architecture-flow.png)
+![Architecture Flow Diagram](architecture-flow.png)
