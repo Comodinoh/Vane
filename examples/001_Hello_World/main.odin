@@ -8,6 +8,7 @@ import "core:mem"
 import vane "vane:core"
 import win  "vane:core/window"
 import gfx  "vane:graphics"
+import      "vane:renderer"
 import      "vane:error"
 
 Data :: struct {
@@ -40,25 +41,29 @@ main :: proc() {
 
     {
         if app, err = vane.new(backend = gfx.Backend.OpenGL,
-            start = vane.app_proc(proc(data: ^Data, app: ^vane.App_State(Data)) -> bool {
-               fmt.println("Starting...")
+            start = vane.app_proc(
+                proc(data: ^Data, app: ^vane.App_State(Data), current_frame: ^renderer.Frame_Context) -> bool {
+                    data.shader = gfx.create_shader(app.device, {
+                        kind = .Vertex,
+                        source = "Meow!",
+                    })
+                    return true
+                }
+            ),
+            stop = vane.app_proc(
+                proc(data: ^Data, app: ^vane.App_State(Data), current_frame: ^renderer.Frame_Context) -> bool {
+                    fmt.println("Stopping...")
+                    return true
+                }
+            ),
+            update = vane.app_proc(
+                proc(data: ^Data, app: ^vane.App_State(Data), current_frame: ^renderer.Frame_Context) -> bool {
+                    cmd := gfx.allocate_command_buffer(app.device, current_frame.pool)
 
-               data.shader = gfx.create_shader(app.device, {
-                  kind = .Vertex,
-                  source = "Meow!",
-               })
-               return true
-            }),
-            stop = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
-               fmt.println("Stopping...")
-               return true
-            }),
-            update = vane.app_proc(proc(data: ^Data,app: ^vane.App_State(Data)) -> bool {
-               cmd := gfx.allocate_command_buffer(app.device, vane.current_frame_context(app).pool)
-
-               gfx.submit_buffer(vane.current_frame_context(app).queue, &cmd)
-               return !win.should_close(app.window)
-            }),
+                    gfx.submit_buffer(current_frame.queue, &cmd)
+                    return !win.should_close(app.window)
+                }
+            ),
         ); err != nil {
             fmt.eprintln("Could not initialise engine")
             fmt.eprintfln("      Reason: {}", err.(error.Error).message)

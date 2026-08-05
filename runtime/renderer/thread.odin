@@ -33,13 +33,6 @@ render_thread_create :: proc(device: graphics.Device_State, window: ^window.Wind
     if err != nil {
         return nil, nil, error.Error{fmt.aprintf("{}", err)}
     }
-    for i in 0..<FRAMES_IN_FLIGHT {
-        data.frames[i] = Frame_Context{
-            pool = graphics.create_command_pool(device),
-            queue = graphics.command_queue_new(device, allocator),
-            fence = graphics.fence_new(device),
-        }
-    }
     data.window = window
     data.allocator = allocator
     data.device = device
@@ -49,13 +42,27 @@ render_thread_create :: proc(device: graphics.Device_State, window: ^window.Wind
     return thread, data, nil
 }
 
-render_thread_destroy :: proc(t: ^thread.Thread, data: ^Render_Thread_Data) {
+render_thread_init :: proc(data: ^Render_Thread_Data) {
     for i in 0..<FRAMES_IN_FLIGHT {
-        frame := data.frames[i]
+        data.frames[i] = Frame_Context{
+            pool = graphics.create_command_pool(data.device),
+            queue = graphics.command_queue_new(data.device, data.allocator),
+            fence = graphics.fence_new(data.device),
+        }
+    }
+}
 
+render_thread_deinit :: proc(data: ^Render_Thread_Data) {
+    for i in 0..<FRAMES_IN_FLIGHT {
+        frame := &data.frames[i]
+
+        graphics.destroy_command_pool(data.device, frame.pool)
         graphics.command_queue_destroy(frame.queue)
         graphics.fence_destroy(frame.fence)
     }
+}
+
+render_thread_destroy :: proc(t: ^thread.Thread, data: ^Render_Thread_Data) {
     free(data, data.allocator)
 
     thread.destroy(t)

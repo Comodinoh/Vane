@@ -12,15 +12,17 @@ Registry :: struct($T: typeid) {
 }
 
 registry_init :: proc(registry: ^$T1/Registry($E), allocator: mem.Allocator) {
-    registry.data = make([dynamic]E)
-    registry.handle_to_data = make([dynamic]int)
-    registry.data_to_handle = make([dynamic]int)
+    registry.data = make([dynamic]E, allocator = allocator)
+    registry.handle_to_data = make([dynamic]int, allocator = allocator)
+    registry.data_to_handle = make([dynamic]int, allocator = allocator)
+    registry.freed_slots = make([dynamic]int, allocator = allocator)
 }
 
 registry_deinit :: proc(registry: ^$T1/Registry($E)) {
     delete(registry.data_to_handle)
     delete(registry.handle_to_data)
     delete(registry.data)
+    delete(registry.freed_slots)
 }
 
 registry_allocate_no_data :: proc(registry: ^$T1/Registry($E)) -> int {
@@ -62,12 +64,12 @@ registry_free :: proc(registry: ^$T/Registry($E), slot: int) {
     registry.data[idx] = registry.data[size-1]
     registry.data_to_handle[idx] = registry.data_to_handle[size-1]
 
-    swapped := data_to_handle[size-1]
+    swapped := registry.data_to_handle[size-1]
 
     registry.handle_to_data[swapped] = idx
 
-    pop(registry.data)
-    pop(registry.data_to_handle)
+    pop(&registry.data)
+    pop(&registry.data_to_handle)
 
     append(&registry.freed_slots, slot)
 }

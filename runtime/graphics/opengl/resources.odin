@@ -133,32 +133,46 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
         idx += 1
 
         #partial switch opcode {
-            case .CreateShader: {
-                idx = uint(mem.align_forward_int(int(idx), align_of(Create_Shader_Data)))
+         case .CreateShader: {
 
-                create_data := cast(^Create_Shader_Data)&buffer[idx]
+            idx = uint(mem.align_forward_int(int(idx), align_of(Create_Shader_Data)))
 
-                idx += size_of(create_data)
+            create_data := cast(^Create_Shader_Data)&buffer[idx]
 
-                start := idx
-                end := idx + create_data.size
+            idx += size_of(Create_Shader_Data)
 
-                cstr := strings.unsafe_string_to_cstring(transmute(string)buffer[start:end])
+            start := idx
+            end := idx + create_data.size
 
-                type := get_shader_type(create_data.data.kind)
-                shader := gl.CreateShader(type)
+            cstr := strings.unsafe_string_to_cstring(transmute(string)buffer[start:end])
 
-                length := i32(create_data.size)
+            type := get_shader_type(create_data.data.kind)
+            shader := gl.CreateShader(type)
 
-                gl.ShaderSource(shader, 1, &cstr, &length)
-                gl.CompileShader(shader)
+            length := i32(create_data.size)
 
-                check_error_shader(shader, type) or_return
+            gl.ShaderSource(shader, 1, &cstr, &length)
+            gl.CompileShader(shader)
 
-                create_data.data.gl_handle = shader
+            check_error_shader(shader, type) or_return
 
-                idx += create_data.size
-            }
+            create_data.data.gl_handle = shader
+
+            idx += create_data.size
+         }
+         case .CreateTexture: {
+            idx = uint(mem.align_forward_int(int(idx), align_of(Create_Texture_Data)))
+
+            create_data := cast(^Create_Texture_Data)&buffer[idx]
+
+            idx += size_of(Create_Texture_Data)
+ 
+            target := get_texture_target(create_data.data.dimension)
+            texture: u32
+
+            gl.CreateTextures(target, 1, transmute([^]u32)&texture)
+
+         }
         }
 
     }

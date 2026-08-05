@@ -20,6 +20,10 @@ command_buffer_init :: proc(state: ^Device_State, buffer: ^Command_Buffer_State,
     buffer.pool = pool
 }
 
+command_buffer_deinit :: proc(buffer: ^Command_Buffer_State) {
+    delete(buffer.buffer)
+}
+
 command_buffer_clear :: proc(buffer: graphics.Command_Buffer_State) {
     buffer := cast(^Command_Buffer_State)buffer
     clear(&buffer.buffer)

@@ -52,6 +52,8 @@ decode_and_execute_commands :: proc(buffer: ^Command_Buffer_State) {
                 idx = mem.align_forward_int(idx, align_of(Bind_Pipeline_Data))
 
                 pipeline_data := cast(^Bind_Pipeline_Data)&buffer[idx]
+
+                idx += size_of(Bind_Pipeline_Data)
             }
         }
     }

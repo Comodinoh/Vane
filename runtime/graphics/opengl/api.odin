@@ -25,6 +25,8 @@ register :: proc() {
         create_pipeline = create_pipeline,
         create_command_pool = create_command_pool,
 
+        destroy_command_pool = destroy_command_pool,
+
         allocate_command_buffer = allocate_command_buffer,
         reset_command_pool = reset_command_pool,
         process_resources = process_resources,
@@ -77,9 +79,19 @@ get_color_size :: proc(color_fmt: graphics.Texture_Color_Format) -> int {
 
 get_shader_type :: proc(kind: graphics.Shader_Kind) -> u32 {
     switch kind {
-    case .Vertex: return gl.VERTEX_SHADER;
-    case .Pixel: return gl.FRAGMENT_SHADER;
+    case .Vertex: return gl.VERTEX_SHADER
+    case .Pixel: return gl.FRAGMENT_SHADER
     }
 
-    return 0;
+    return 0
+}
+
+get_texture_target :: proc(dimension: graphics.Texture_Dimension) -> u32 {
+   switch dimension {
+   case .Texture1D: return gl.TEXTURE_1D
+   case .Texture2D: return gl.TEXTURE_2D
+   case .Texture3D: return gl.TEXTURE_3D
+   }
+   
+   return 0
 }

@@ -63,11 +63,15 @@ device_init :: proc(state: graphics.Device_State) {
     registry_init(&state.pipeline_registry, state.allocator)
     registry_init(&state.command_pool_registry, state.allocator)
 
+    state.resource_loading_queue.queue = make([dynamic]u8, 0, 1024, state.allocator)
+
     fmt.println("[OpenGL] All registries have been initialised")
 }
 
 device_deinit :: proc(state: graphics.Device_State) {
     state := cast(^Device_State)state
+
+    delete(state.resource_loading_queue.queue)
 
     registry_deinit(&state.command_pool_registry)
     registry_deinit(&state.pipeline_registry)
@@ -122,11 +126,33 @@ create_command_pool :: proc(state: graphics.Device_State) -> graphics.Command_Po
         append(&allocated_buffers, buffer)
     }
 
-    pool := registry_get_int(&state.command_pool_registry, slot)
+    handle := graphics.Command_Pool_Handle(slot)
+
+    pool := registry_get(&state.command_pool_registry, handle)
     pool.free_buffers = free_buffers
     pool.allocated_buffers = allocated_buffers
 
     return slot
+}
+
+destroy_command_pool :: proc(state: graphics.Device_State, pool: graphics.Command_Pool_Handle) {
+    state := cast(^Device_State)state
+
+    pool_data := registry_get(&state.command_pool_registry, pool)
+
+    for buffer in pool_data.free_buffers {
+        command_buffer_deinit(buffer)
+        mem.free(buffer, state.allocator)
+    }
+    for buffer in pool_data.allocated_buffers {
+        command_buffer_deinit(buffer)
+        mem.free(buffer, state.allocator)
+    }
+
+    delete(pool_data.free_buffers)
+    delete(pool_data.allocated_buffers)
+
+    registry_free(&state.command_pool_registry, pool.(int))
 }
 
 allocate_command_buffer :: proc(state: graphics.Device_State, pool: graphics.Command_Pool_Handle) -> graphics.Command_Buffer_State {
@@ -150,7 +176,6 @@ allocate_command_buffer :: proc(state: graphics.Device_State, pool: graphics.Com
 
 reset_command_pool :: proc(state: graphics.Device_State, pool: graphics.Command_Pool_Handle) {
     state := cast(^Device_State)state
-
     pool_data := registry_get(&state.command_pool_registry, pool)
 
     for &buf in pool_data.allocated_buffers {

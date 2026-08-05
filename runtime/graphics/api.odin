@@ -34,14 +34,20 @@ Texture_Color_Format :: enum {
     RGBA,
 }
 
+Texture_Internal_Format :: enum {
+   RGB8,
+   RGBA8,
+}
+
 Texture_Size :: [3]int
 
 Texture_Spec :: struct{
-    dimension: Texture_Dimension,
-    data_format: Texture_Data_Format,
-    color_format: Texture_Color_Format,
-    size: Texture_Size,
-    data: rawptr,
+    dimension:       Texture_Dimension,
+    data_format:     Texture_Data_Format,
+    color_format:    Texture_Color_Format,
+    internal_format: Texture_Internal_Format,
+    size:            Texture_Size,
+    data:            rawptr,
 }
 
 Shader_Kind :: enum {
@@ -107,6 +113,8 @@ Device :: struct {
     create_pipeline: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Handle,
     create_command_pool: proc(state: Device_State) -> Command_Pool_Handle,
 
+    destroy_command_pool: proc(state: Device_State, pool: Command_Pool_Handle),
+
     allocate_command_buffer: proc(state: Device_State, pool: Command_Pool_Handle) -> Command_Buffer_State,
     reset_command_pool: proc(state: Device_State, pool: Command_Pool_Handle),
 
@@ -148,6 +156,10 @@ create_pipeline :: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Ha
 
 create_command_pool :: proc(state: Device_State) -> Command_Pool_Handle {
     return DEVICE_VTABLE[CURRENT_BACKEND].create_command_pool(state)
+}
+
+destroy_command_pool :: proc(state: Device_State, pool: Command_Pool_Handle) {
+    DEVICE_VTABLE[CURRENT_BACKEND].destroy_command_pool(state, pool)
 }
 
 allocate_command_buffer :: proc(state: Device_State, pool: Command_Pool_Handle) -> Command_Buffer_State {
