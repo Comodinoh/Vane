@@ -24,12 +24,16 @@ register :: proc() {
         create_shader = create_shader,
         create_pipeline = create_pipeline,
         create_command_pool = create_command_pool,
+        create_framebuffer = create_framebuffer,
 
         destroy_command_pool = destroy_command_pool,
 
         allocate_command_buffer = allocate_command_buffer,
         reset_command_pool = reset_command_pool,
         process_resources = process_resources,
+
+        swapchain_acquire_next = swapchain_acquire_next,
+        swapchain_present = swapchain_present,
     })
     graphics.register_command_buffer_vtable(.OpenGL, {
         bind_pipeline = bind_pipeline,

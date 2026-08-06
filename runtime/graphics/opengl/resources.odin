@@ -14,6 +14,7 @@ Loading_Opcode :: enum(u8) {
     CreateTexture = 0,
     CreateShader,
     CreatePipeline,
+    CreateFramebuffer,
 }
 
 Resource_Loading_Queue :: struct {
@@ -29,6 +30,7 @@ Create_Data :: struct($H, $Data: typeid) {
 Create_Texture_Data :: distinct Create_Data(graphics.Texture_Handle, Texture_Data)
 Create_Shader_Data :: distinct Create_Data(graphics.Shader_Handle, Shader_Data)
 Create_Pipeline_Data :: distinct Create_Data(graphics.Pipeline_Handle, Pipeline_Data)
+Create_Framebuffer_Data :: distinct Create_Data(graphics.Framebuffer_Handle, Framebuffer_Data)
 
 resource_push_texture :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Texture_Data), handle: graphics.Texture_Handle, payload: rawptr) {
     append(&queue.queue, cast(u8)Loading_Opcode.CreateTexture)
@@ -52,6 +54,9 @@ resource_push_texture :: proc(queue: ^Resource_Loading_Queue, registry: ^Registr
 
     resize(&queue.queue, idx + total_size)
 
+
+    // TODO: In the future we will need to store more arrays,
+    // find a way to not have to encode it manually everytime
     copy(queue.queue[idx:], slice.from_ptr(transmute(^u8)payload, total_size))
 }
 
@@ -93,6 +98,29 @@ resource_push_pipeline :: proc(queue: ^Resource_Loading_Queue, registry: ^Regist
 
     resize(&queue.queue, idx + size_of(create_data))
     copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+}
+
+resource_push_framebuffer :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Framebuffer_Data), handle: graphics.Framebuffer_Handle, attachments: []graphics.Texture_Handle) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateFramebuffer)
+    align(&queue.queue, align_of(Create_Framebuffer_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Framebuffer_Data{
+        handle,
+        data,
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+
+    idx += size_of(create_data)
+
+    resize(&queue.queue, uint(idx) + len(attachments)*size_of(graphics.Texture_Handle))
+
+    copy(queue.queue[idx:], transmute([]u8)attachments)
 }
 
 get_shader_name :: proc(type: u32) -> string{

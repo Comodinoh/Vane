@@ -88,7 +88,7 @@ render_thread_main :: proc(thread: ^thread.Thread) {
 
         graphics.execute(frame.queue, frame.fence)
 
-        window.swap_buffers(data.window)
+        graphics.swapchain_present(data.device, data.window)
 
         data.current_frame = (data.current_frame + 1 ) % FRAMES_IN_FLIGHT
     }

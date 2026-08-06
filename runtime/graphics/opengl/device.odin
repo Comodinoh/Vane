@@ -32,12 +32,19 @@ Command_Pool_Data :: struct {
     allocated_buffers: [dynamic]^Command_Buffer_State,
 }
 
+Framebuffer_Data :: struct {
+    gl_handle: u32,
+    attachment_count: u32,
+}
+
 Device_State :: struct {
     allocator: mem.Allocator,
     texture_registry: Registry(Texture_Data),
     shader_registry: Registry(Shader_Data),
     pipeline_registry: Registry(Pipeline_Data),
     command_pool_registry: Registry(Command_Pool_Data),
+    framebuffer_registry: Registry(Framebuffer_Data),
+    default_framebuffer: graphics.Framebuffer_Handle,
     resource_loading_queue: Resource_Loading_Queue,
 }
 
@@ -62,6 +69,9 @@ device_init :: proc(state: graphics.Device_State) {
     registry_init(&state.shader_registry, state.allocator)
     registry_init(&state.pipeline_registry, state.allocator)
     registry_init(&state.command_pool_registry, state.allocator)
+    registry_init(&state.framebuffer_registry, state.allocator)
+
+    state.default_framebuffer = registry_allocate(&state.framebuffer_registry, Framebuffer_Data{gl.FRONT_AND_BACK, 2})
 
     state.resource_loading_queue.queue = make([dynamic]u8, 0, 1024, state.allocator)
 
@@ -73,6 +83,7 @@ device_deinit :: proc(state: graphics.Device_State) {
 
     delete(state.resource_loading_queue.queue)
 
+    registry_deinit(&state.framebuffer_registry)
     registry_deinit(&state.command_pool_registry)
     registry_deinit(&state.pipeline_registry)
     registry_deinit(&state.shader_registry)
@@ -135,6 +146,21 @@ create_command_pool :: proc(state: graphics.Device_State) -> graphics.Command_Po
     return slot
 }
 
+create_framebuffer :: proc(state: graphics.Device_State, spec: graphics.Framebuffer_Spec) -> graphics.Framebuffer_Handle {
+    state := cast(^Device_State)state
+
+    handle : graphics.Framebuffer_Handle = registry_allocate(&state.framebuffer_registry, Framebuffer_Data{0, u32(len(spec.attachments))})
+
+    resource_push_framebuffer(
+        &state.resource_loading_queue, 
+        &state.framebuffer_registry,
+        handle,
+        spec.attachments
+    )
+
+    return handle
+}
+
 destroy_command_pool :: proc(state: graphics.Device_State, pool: graphics.Command_Pool_Handle) {
     state := cast(^Device_State)state
 
@@ -192,4 +218,14 @@ process_resources :: proc(state: graphics.Device_State) -> Maybe(error.Error) {
     resource_decode_and_execute(&state.resource_loading_queue, state) or_return
 
     return nil
+}
+
+swapchain_acquire_next :: proc(state: graphics.Device_State) -> (image_index: uint, framebuffer: graphics.Framebuffer_Handle) {
+    state := cast(^Device_State)state
+
+    return 0, state.default_framebuffer
+}
+
+swapchain_present :: proc(state: graphics.Device_State, win: ^window.Window) {
+    window.swap_buffers(win)
 }

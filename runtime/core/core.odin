@@ -8,12 +8,13 @@ import "core:sync"
 NAME :: #config(VANE_NAME, "Vane")
 VERSION :: #config(VANE_VERSION, "0.0.1-BETA")
 
-import win      "vane:core/window"
-import error    "vane:error"
-import gfx      "vane:graphics"
-import gl       "vane:graphics/opengl"
-import renderer "vane:renderer"
-import crash    "vane:crash"
+import win          "vane:core/window"
+import error        "vane:error"
+import gfx          "vane:graphics"
+import gfx_backend  "vane:graphics/backend"
+import gl           "vane:graphics/opengl"
+import renderer     "vane:renderer"
+import crash        "vane:crash"
 
 App_Proc_Struct :: struct($T: typeid) {
     app_proc: #type proc(data: ^T, app: ^App_State(T), current_frame: ^renderer.Frame_Context) -> bool
@@ -50,7 +51,7 @@ new :: proc(
     start: $T/App_Proc_Struct($E), 
     stop: T, 
     update: T,
-    backend := gfx.Backend.OpenGL,
+    backend := gfx_backend.Backend.OpenGL,
     title: string = "Vane Game", width: int = 1280, height: int = 720,
     ) -> (state: App_State(E), err : Maybe(error.Error)){
     fmt.println("Initialising app...")
@@ -59,9 +60,9 @@ new :: proc(
 
     fmt.println("Initialised crash report system")
 
-    gfx.init(backend) or_return
+    gfx_backend.init(backend) or_return
 
-    when gfx.OPENGL {
+    when gfx_backend.OPENGL {
         gl.register()
         fmt.println("Registered OpenGL graphics API")
     }
@@ -74,7 +75,7 @@ new :: proc(
     state.stop = stop
     state.update = update
 
-    state.window = win.new(gfx.get_backend(), {title, width, height})
+    state.window = win.new(gfx_backend.get_backend(), {title, width, height})
     win.init(state.window) or_return
     
     fmt.println("Initialised window")

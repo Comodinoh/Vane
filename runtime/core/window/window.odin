@@ -6,7 +6,7 @@ import "core:c"
 import "base:runtime"
 
 import          "vane:error"
-import gfx      "vane:graphics"
+import          "vane:graphics/backend"
 import glfw     "vendor:glfw"
 
 Window :: struct {
@@ -15,7 +15,7 @@ Window :: struct {
     width:  int,
     height: int,
 
-    backend: gfx.Backend,
+    backend: backend.Backend,
 
     handle: rawptr
 }
@@ -27,7 +27,7 @@ Window_Spec :: struct {
     height: int,
 }
 
-new :: proc(backend: gfx.Backend, spec: Window_Spec, allocator := context.allocator) -> ^Window{
+new :: proc(backend: backend.Backend, spec: Window_Spec, allocator := context.allocator) -> ^Window{
     return new_clone(Window{title = spec.title, width = spec.width, height = spec.height, backend = backend}, allocator)
 }
 
@@ -41,10 +41,10 @@ init :: proc(win: ^Window) -> (err : Maybe(error.Error)){
     }
     defer if err != nil do glfw.Terminate()
 
-    if win.backend == gfx.Backend.OpenGL {
+    if win.backend == .OpenGL {
         glfw.WindowHint(glfw.CLIENT_API, glfw.OPENGL_API)
-        glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, c.int(gfx.OPENGL_VERSION_MAJOR))
-        glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, c.int(gfx.OPENGL_VERSION_MINOR))
+        glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, c.int(backend.OPENGL_VERSION_MAJOR))
+        glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, c.int(backend.OPENGL_VERSION_MINOR))
     }else {
         glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
     }
