@@ -44,7 +44,7 @@ Shader_Kind :: enum {
 
 Shader_Spec :: struct {
     kind: Shader_Kind,
-    source: string,
+    source: []u8,
 }
 
 Pipeline_Spec :: struct {
@@ -101,7 +101,8 @@ Device :: struct {
     deinit: proc(state: Device_State),
 
     create_texture: proc(state: Device_State, spec: Texture_Spec) -> Texture_Handle,
-    create_shader: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle,
+    create_shader_from_source: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle,
+    create_shader_from_binary: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle,
     create_pipeline: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Handle,
     create_command_pool: proc(state: Device_State) -> Command_Pool_Handle,
     create_framebuffer: proc(state: Device_State, spec: Framebuffer_Spec) -> Framebuffer_Handle,
@@ -142,8 +143,12 @@ create_texture :: proc(state: Device_State, spec: Texture_Spec) -> Texture_Handl
     return DEVICE_VTABLE[backend.get_backend()].create_texture(state, spec)
 }
 
-create_shader :: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle {
-    return DEVICE_VTABLE[backend.get_backend()].create_shader(state, spec)
+create_shader_from_source :: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle {
+    return DEVICE_VTABLE[backend.get_backend()].create_shader_from_source(state, spec)
+}
+
+create_shader_from_binary :: proc(state: Device_State, spec: Shader_Spec) -> Shader_Handle {
+    return DEVICE_VTABLE[backend.get_backend()].create_shader_from_binary(state, spec)
 }
 
 create_pipeline :: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Handle {

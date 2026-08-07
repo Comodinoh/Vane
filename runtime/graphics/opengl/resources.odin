@@ -12,13 +12,15 @@ import gl "vendor:OpenGL"
 
 Loading_Opcode :: enum(u8) {
     CreateTexture = 0,
-    CreateShader,
+    CreateShaderFromSource,
+    CreateShaderFromBinary,
     CreatePipeline,
     CreateFramebuffer,
 }
 
 Resource_Loading_Queue :: struct {
     queue:  [dynamic]u8,
+    allocator: mem.Allocator,
 }
 
 @(private)
@@ -27,48 +29,106 @@ Create_Data :: struct($H, $Data: typeid) {
     using data: ^Data
 }
 
-Create_Texture_Data :: distinct Create_Data(graphics.Texture_Handle, Texture_Data)
-Create_Shader_Data :: distinct Create_Data(graphics.Shader_Handle, Shader_Data)
-Create_Pipeline_Data :: distinct Create_Data(graphics.Pipeline_Handle, Pipeline_Data)
-Create_Framebuffer_Data :: distinct Create_Data(graphics.Framebuffer_Handle, Framebuffer_Data)
+Create_Texture_Data :: struct {
+    using data: ^Texture_Data,
+    handle: graphics.Texture_Handle,
+    payload: rawptr,
+}
 
-resource_push_texture :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Texture_Data), handle: graphics.Texture_Handle, payload: rawptr) {
+Create_Shader_Data :: struct {
+    using data: ^Shader_Data,
+    handle: graphics.Shader_Handle,
+    payload: []u8,
+}
+
+Create_Pipeline_Data :: distinct Create_Data(graphics.Pipeline_Handle, Pipeline_Data)
+
+Create_Framebuffer_Data :: struct {
+    using data: ^Framebuffer_Data,
+    handle: graphics.Framebuffer_Handle,
+}
+
+resource_loading_queue_init :: proc(queue: ^Resource_Loading_Queue, allocator: mem.Allocator) {
+    queue.allocator = allocator
+    queue.queue = make([dynamic]u8, 0, DEFAULT_RESOURCE_LOADING_QUEUE_CAPACITY)
+}
+
+resource_loading_queue_deinit :: proc(queue: ^Resource_Loading_Queue) {
+    mem.delete(queue.queue)
+}
+
+resource_push_texture_byte :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Texture_Data), handle: graphics.Texture_Handle, payload: []u8) {
     append(&queue.queue, cast(u8)Loading_Opcode.CreateTexture)
     align(&queue.queue, align_of(Create_Texture_Data))
 
     data := registry_get(registry, handle.(int))
 
     create_data := Create_Texture_Data{
-        handle,
-        data
+        handle = handle,
+        data = data,
+        payload = raw_data(slice.clone(payload, queue.allocator)),
     }
 
     idx := len(queue.queue)
 
     resize(&queue.queue, idx + size_of(create_data))
     copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
-     
-    idx += size_of(create_data)
-
-    total_size := (get_color_size(data.color_format) + get_data_size(data.data_format)) * data.vertices
-
-    resize(&queue.queue, idx + total_size)
-
-
-    // TODO: In the future we will need to store more arrays,
-    // find a way to not have to encode it manually everytime
-    copy(queue.queue[idx:], slice.from_ptr(transmute(^u8)payload, total_size))
 }
 
-resource_push_shader :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Shader_Data), handle: graphics.Shader_Handle, payload: string) {
-    append(&queue.queue, cast(u8)Loading_Opcode.CreateShader)
+resource_push_texture_float32 :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Texture_Data), handle: graphics.Texture_Handle, payload: []f32) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateTexture)
+    align(&queue.queue, align_of(Create_Texture_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Texture_Data{
+        handle = handle,
+        data = data,
+        payload = raw_data(slice.clone(payload, queue.allocator)),
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+}
+
+resource_push_texture :: proc{resource_push_texture_byte, resource_push_texture_float32}
+
+resource_push_shader_source :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Shader_Data), handle: graphics.Shader_Handle, payload: []u8) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateShaderFromSource)
     align(&queue.queue, align_of(Create_Shader_Data))
 
     data := registry_get(registry, handle.(int))
 
     create_data := Create_Shader_Data{
-        handle,
-        data
+        handle = handle,
+        payload = slice.clone(payload, queue.allocator),
+        data = data,
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+
+    idx += size_of(create_data)
+
+    resize(&queue.queue, uint(idx) + data.size)
+
+    copy(queue.queue[idx:], transmute([]u8)payload)
+}
+
+resource_push_shader_binary :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Shader_Data), handle: graphics.Shader_Handle, payload: []u8) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateShaderFromBinary)
+    align(&queue.queue, align_of(Create_Shader_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Shader_Data{
+        handle = handle,
+        payload = slice.clone(payload, queue.allocator),
+        data = data,
     }
 
     idx := len(queue.queue)
@@ -100,27 +160,21 @@ resource_push_pipeline :: proc(queue: ^Resource_Loading_Queue, registry: ^Regist
     copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
 }
 
-resource_push_framebuffer :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Framebuffer_Data), handle: graphics.Framebuffer_Handle, attachments: []graphics.Texture_Handle) {
+resource_push_framebuffer :: proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Framebuffer_Data), handle: graphics.Framebuffer_Handle) {
     append(&queue.queue, cast(u8)Loading_Opcode.CreateFramebuffer)
     align(&queue.queue, align_of(Create_Framebuffer_Data))
 
     data := registry_get(registry, handle.(int))
 
     create_data := Create_Framebuffer_Data{
-        handle,
-        data,
+        handle = handle,
+        data = data,
     }
 
     idx := len(queue.queue)
 
     resize(&queue.queue, idx + size_of(create_data))
     copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
-
-    idx += size_of(create_data)
-
-    resize(&queue.queue, uint(idx) + len(attachments)*size_of(graphics.Texture_Handle))
-
-    copy(queue.queue[idx:], transmute([]u8)attachments)
 }
 
 get_shader_name :: proc(type: u32) -> string{
@@ -148,6 +202,22 @@ check_error_shader :: proc(shader: u32, type: u32) -> Maybe(error.Error){
    return error.Error{fmt.aprintf("Could not compile {} shader:\n{}", get_shader_name(type), error_str)}
 }
 
+check_error_program :: proc(program: u32) -> Maybe(error.Error){
+   result, log_length: i32
+
+   gl.GetProgramiv(program, gl.COMPILE_STATUS, &result)
+   gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &log_length)
+
+   if result != 0 do return nil
+   error_message := make([]u8, log_length, allocator = context.temp_allocator)
+
+   gl.GetProgramInfoLog(program, log_length, nil, raw_data(error_message))
+
+   error_str := transmute(string)error_message[:log_length-1]
+
+   return error.Error{fmt.aprintf("Could not link shader program:\n{}", error_str)}
+}
+
 resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Device_State) -> Maybe(error.Error){
     buffer := queue.queue[:]
 
@@ -155,24 +225,23 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
 
     idx : uint = 0
 
+    max_color_attachments : i32
+    gl.GetIntegerv(gl.MAX_COLOR_ATTACHMENTS, &max_color_attachments)
+
     for idx < len(buffer) {
         opcode := cast(Loading_Opcode)buffer[idx]
 
         idx += 1
 
         #partial switch opcode {
-         case .CreateShader: {
-
+         case .CreateShaderFromSource: {
             idx = uint(mem.align_forward_int(int(idx), align_of(Create_Shader_Data)))
 
             create_data := cast(^Create_Shader_Data)&buffer[idx]
 
             idx += size_of(Create_Shader_Data)
 
-            start := idx
-            end := idx + create_data.size
-
-            cstr := strings.unsafe_string_to_cstring(transmute(string)buffer[start:end])
+            cstr := strings.unsafe_string_to_cstring(transmute(string)create_data.payload)
 
             type := get_shader_type(create_data.data.kind)
             shader := gl.CreateShader(type)
@@ -186,7 +255,28 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
 
             create_data.data.gl_handle = shader
 
-            idx += create_data.size
+            mem.delete(create_data.payload, queue.allocator)
+         }
+         case .CreateShaderFromBinary: {
+            idx = uint(mem.align_forward_int(int(idx), align_of(Create_Shader_Data)))
+
+            create_data := cast(^Create_Shader_Data)&buffer[idx]
+
+            idx += size_of(Create_Shader_Data)
+
+            type := get_shader_type(create_data.data.kind)
+            shader := gl.CreateShader(type)
+
+            length := i32(len(create_data.payload))
+
+            gl.ShaderBinary(1, &shader, gl.SHADER_BINARY_FORMAT_SPIR_V, raw_data(create_data.payload), length)
+            gl.SpecializeShader(shader, "main", 0, nil, nil)
+
+            check_error_shader(shader, type) or_return
+
+            create_data.data.gl_handle = shader
+
+            mem.delete(create_data.payload, queue.allocator)
          }
          case .CreateTexture: {
             idx = uint(mem.align_forward_int(int(idx), align_of(Create_Texture_Data)))
@@ -200,9 +290,122 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
 
             gl.CreateTextures(target, 1, transmute([^]u32)&texture)
 
+            switch create_data.dimension {
+                case .Texture1D: {
+                    gl.TextureStorage1D(
+                        texture,
+                        1,
+                        gl.RGB8,
+                        i32(create_data.size.x)
+                    )
+
+                    gl.TextureSubImage1D(
+                        texture,
+                        0,
+                        0,
+                        i32(create_data.size.x),
+                        gl.RGBA8,
+                        get_data_type(create_data.data_format),
+                        create_data.payload
+                    )
+                }
+                case .Texture2D: {
+                    gl.TextureStorage2D(
+                       texture,
+                       1,
+                       gl.RGBA8,
+                       i32(create_data.size.x),
+                       i32(create_data.size.y),
+                    )
+
+                    gl.TextureSubImage2D(
+                        texture,
+                        0,
+                        0,
+                        0,
+                        i32(create_data.size.x),
+                        i32(create_data.size.y),
+                        gl.RGBA8,
+                        get_data_type(create_data.data_format),
+                        create_data.payload
+                    )
+                }
+                case .Texture3D: {
+                    gl.TextureStorage3D(
+                       texture,
+                       1,
+                       gl.RGBA8,
+                       i32(create_data.size.x),
+                       i32(create_data.size.y),
+                       i32(create_data.size.z),
+                    )
+
+                    gl.TextureSubImage3D(
+                        texture,
+                        0,
+                        0,
+                        0,
+                        0,
+                        i32(create_data.size.x),
+                        i32(create_data.size.y),
+                        i32(create_data.size.z),
+                        gl.RGBA8,
+                        get_data_type(create_data.data_format),
+                        create_data.payload
+                    )
+
+
+                }
+            }
+
+            switch create_data.data_format {
+                case .Float: mem.delete(slice.from_ptr(cast(^f32)create_data.payload, create_data.vertices), queue.allocator)
+                case .UnsignedByte: mem.delete(slice.from_ptr(cast(^u8)create_data.payload, create_data.vertices), queue.allocator)
+            }
+         }
+         case .CreatePipeline: {
+            idx = uint(mem.align_forward_int(int(idx), align_of(Create_Pipeline_Data)))
+
+            create_data := cast(^Create_Pipeline_Data)&buffer[idx]
+
+            idx += size_of(Create_Pipeline_Data)
+
+            vs := create_data.vertex_shader
+            ps := create_data.pixel_shader
+
+            program := gl.CreateProgram()
+
+            gl.AttachShader(program, registry_get(&device.shader_registry, vs).gl_handle)
+            gl.AttachShader(program, registry_get(&device.shader_registry, ps).gl_handle)
+
+            gl.LinkProgram(program)
+
+            check_error_program(program) or_return
+
+            create_data.data.program_gl_handle = program
+         }
+         case .CreateFramebuffer: {
+            idx = uint(mem.align_forward_int(int(idx), align_of(Create_Framebuffer_Data)))
+
+            create_data := cast(^Create_Framebuffer_Data)&buffer[idx]
+
+            idx += size_of(Create_Framebuffer_Data)
+
+            fb: u32
+            gl.CreateFramebuffers(1, transmute([^]u32)&fb)
+
+            for i := i32(0); i < i32(len(create_data.attachments)) && i < max_color_attachments; i += 1 {
+                gl.NamedFramebufferTexture(
+                    fb,
+                    u32(gl.COLOR_ATTACHMENT0 + i), 
+                    registry_get(&device.texture_registry, create_data.attachments[i]).gl_handle,
+                    0
+                )
+            }
+
+            create_data.data.gl_handle = fb
          }
         }
-
     }
     return nil
 }

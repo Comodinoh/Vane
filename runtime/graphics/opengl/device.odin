@@ -6,6 +6,7 @@ import "vane:error"
 
 import "core:mem"
 import "core:fmt"
+import "core:slice"
 import gl "vendor:OpenGL"
 
 Texture_Data :: struct {
@@ -25,6 +26,7 @@ Shader_Data :: struct {
 
 Pipeline_Data :: struct {
     vertex_shader, pixel_shader: graphics.Shader_Handle,
+    program_gl_handle: u32,
 }
 
 Command_Pool_Data :: struct {
@@ -34,17 +36,20 @@ Command_Pool_Data :: struct {
 
 Framebuffer_Data :: struct {
     gl_handle: u32,
-    attachment_count: u32,
+    attachments: []graphics.Texture_Handle,
 }
 
 Device_State :: struct {
     allocator: mem.Allocator,
+
     texture_registry: Registry(Texture_Data),
     shader_registry: Registry(Shader_Data),
     pipeline_registry: Registry(Pipeline_Data),
     command_pool_registry: Registry(Command_Pool_Data),
     framebuffer_registry: Registry(Framebuffer_Data),
+
     default_framebuffer: graphics.Framebuffer_Handle,
+
     resource_loading_queue: Resource_Loading_Queue,
 }
 
@@ -71,9 +76,9 @@ device_init :: proc(state: graphics.Device_State) {
     registry_init(&state.command_pool_registry, state.allocator)
     registry_init(&state.framebuffer_registry, state.allocator)
 
-    state.default_framebuffer = registry_allocate(&state.framebuffer_registry, Framebuffer_Data{gl.FRONT_AND_BACK, 2})
+    state.default_framebuffer = registry_allocate(&state.framebuffer_registry, Framebuffer_Data{gl.FRONT_AND_BACK, nil})
 
-    state.resource_loading_queue.queue = make([dynamic]u8, 0, 1024, state.allocator)
+    resource_loading_queue_init(&state.resource_loading_queue, state.allocator)
 
     fmt.println("[OpenGL] All registries have been initialised")
 }
@@ -81,7 +86,7 @@ device_init :: proc(state: graphics.Device_State) {
 device_deinit :: proc(state: graphics.Device_State) {
     state := cast(^Device_State)state
 
-    delete(state.resource_loading_queue.queue)
+    resource_loading_queue_deinit(&state.resource_loading_queue)
 
     registry_deinit(&state.framebuffer_registry)
     registry_deinit(&state.command_pool_registry)
@@ -97,18 +102,41 @@ create_texture :: proc(state: graphics.Device_State, spec: graphics.Texture_Spec
     if spec.size.y != 0 do vertices *= spec.size.y
     if spec.size.z != 0 do vertices *= spec.size.z
 
-    handle : graphics.Texture_Handle = registry_allocate(&state.texture_registry, Texture_Data{0, spec.dimension, spec.data_format, spec.color_format, spec.size, vertices})
+    handle : graphics.Texture_Handle = registry_allocate(&state.texture_registry,
+        Texture_Data{
+            0, 
+            spec.dimension, 
+            spec.data_format, 
+            spec.color_format, 
+            spec.size, 
+            vertices
+        }
+    )
 
-    resource_push_texture(&state.resource_loading_queue, &state.texture_registry, handle, spec.data)
+    switch spec.data_format {
+        case .Float:
+            resource_push_texture(&state.resource_loading_queue, &state.texture_registry, handle, slice.from_ptr(cast(^f32)spec.data, vertices))
+        case .UnsignedByte:
+            resource_push_texture(&state.resource_loading_queue, &state.texture_registry, handle, slice.from_ptr(cast(^u8)spec.data,    vertices))
+    }
 
     return handle
 }
 
-create_shader :: proc(state: graphics.Device_State, spec: graphics.Shader_Spec) -> graphics.Shader_Handle {
+create_shader_from_source :: proc(state: graphics.Device_State, spec: graphics.Shader_Spec) -> graphics.Shader_Handle {
     state := cast(^Device_State)state
 
     handle : graphics.Shader_Handle = registry_allocate(&state.shader_registry, Shader_Data{0, spec.kind, len(spec.source)})
-    resource_push_shader(&state.resource_loading_queue, &state.shader_registry, handle, spec.source)
+    resource_push_shader_source(&state.resource_loading_queue, &state.shader_registry, handle, spec.source)
+
+    return handle
+}
+
+create_shader_from_binary :: proc(state: graphics.Device_State, spec: graphics.Shader_Spec) -> graphics.Shader_Handle {
+    state := cast(^Device_State)state
+
+    handle : graphics.Shader_Handle = registry_allocate(&state.shader_registry, Shader_Data{0, spec.kind, len(spec.source)})
+    resource_push_shader_binary(&state.resource_loading_queue, &state.shader_registry, handle, spec.source)
 
     return handle
 }
@@ -116,7 +144,7 @@ create_shader :: proc(state: graphics.Device_State, spec: graphics.Shader_Spec) 
 create_pipeline :: proc(state: graphics.Device_State, spec: graphics.Pipeline_Spec) -> graphics.Pipeline_Handle {
     state := cast(^Device_State)state
 
-    handle : graphics.Pipeline_Handle = registry_allocate(&state.pipeline_registry, Pipeline_Data{spec.vertex_shader, spec.pixel_shader})
+    handle : graphics.Pipeline_Handle = registry_allocate(&state.pipeline_registry, Pipeline_Data{spec.vertex_shader, spec.pixel_shader, 0})
     resource_push_pipeline(&state.resource_loading_queue, &state.pipeline_registry, handle)
 
     return handle
@@ -149,13 +177,17 @@ create_command_pool :: proc(state: graphics.Device_State) -> graphics.Command_Po
 create_framebuffer :: proc(state: graphics.Device_State, spec: graphics.Framebuffer_Spec) -> graphics.Framebuffer_Handle {
     state := cast(^Device_State)state
 
-    handle : graphics.Framebuffer_Handle = registry_allocate(&state.framebuffer_registry, Framebuffer_Data{0, u32(len(spec.attachments))})
+    handle : graphics.Framebuffer_Handle = registry_allocate(&state.framebuffer_registry, 
+        Framebuffer_Data{
+            0, 
+            slice.clone(spec.attachments, state.allocator)
+        }
+    )
 
     resource_push_framebuffer(
         &state.resource_loading_queue, 
         &state.framebuffer_registry,
         handle,
-        spec.attachments
     )
 
     return handle

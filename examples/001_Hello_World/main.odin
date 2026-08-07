@@ -43,9 +43,10 @@ main :: proc() {
         if app, err = vane.new(backend = .OpenGL,
             start = vane.app_proc(
                 proc(data: ^Data, app: ^vane.App_State(Data), current_frame: ^renderer.Frame_Context) -> bool {
-                    data.shader = gfx.create_shader(app.device, {
+                    shader_source := "Meow!"
+                    data.shader = gfx.create_shader_from_source(app.device, {
                         kind = .Vertex,
-                        source = "Meow!",
+                        source = transmute([]u8)shader_source,
                     })
                     return true
                 }

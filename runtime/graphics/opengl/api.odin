@@ -12,6 +12,7 @@ import "vane:error"
 
 DEFAULT_COMMAND_BUFFER_SIZE :: 2 * 1024 * 1024
 DEFAULT_COMMAND_POOL_SIZE :: 10
+DEFAULT_RESOURCE_LOADING_QUEUE_CAPACITY :: 4 * 1024 
 
 register :: proc() {
     graphics.register_device_vtable(.OpenGL, {
@@ -21,7 +22,8 @@ register :: proc() {
         deinit = device_deinit,
 
         create_texture = create_texture,
-        create_shader = create_shader,
+        create_shader_from_source = create_shader_from_source,
+        create_shader_from_binary = create_shader_from_binary,
         create_pipeline = create_pipeline,
         create_command_pool = create_command_pool,
         create_framebuffer = create_framebuffer,
@@ -59,6 +61,16 @@ align :: proc(array: ^$T/[dynamic]$E, alignment: int) {
     if aligned > len(array) {
         resize(array, aligned)
     }
+}
+
+get_data_type :: proc(data_fmt: graphics.Texture_Data_Format) -> u32 {
+    switch data_fmt {
+    case .Float: 
+        return gl.FLOAT
+    case .UnsignedByte:
+        return gl.UNSIGNED_BYTE
+    }
+    return 0
 }
 
 get_data_size :: proc(data_fmt: graphics.Texture_Data_Format) -> int {
