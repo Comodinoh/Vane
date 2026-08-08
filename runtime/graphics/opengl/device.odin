@@ -39,6 +39,10 @@ Framebuffer_Data :: struct {
     attachments: []graphics.Texture_Handle,
 }
 
+Buffer_Data :: struct {
+    gl_handle: u32,
+}
+
 Device_State :: struct {
     allocator: mem.Allocator,
 
@@ -47,6 +51,7 @@ Device_State :: struct {
     pipeline_registry: Registry(Pipeline_Data),
     command_pool_registry: Registry(Command_Pool_Data),
     framebuffer_registry: Registry(Framebuffer_Data),
+    buffer_registry: Registry(Buffer_Data),
 
     default_framebuffer: graphics.Framebuffer_Handle,
 
@@ -75,6 +80,7 @@ device_init :: proc(state: graphics.Device_State) {
     registry_init(&state.pipeline_registry, state.allocator)
     registry_init(&state.command_pool_registry, state.allocator)
     registry_init(&state.framebuffer_registry, state.allocator)
+    registry_init(&state.buffer_registry, state.allocator)
 
     state.default_framebuffer = registry_allocate(&state.framebuffer_registry, Framebuffer_Data{gl.FRONT_AND_BACK, nil})
 
@@ -88,6 +94,7 @@ device_deinit :: proc(state: graphics.Device_State) {
 
     resource_loading_queue_deinit(&state.resource_loading_queue)
 
+    registry_deinit(&state.buffer_registry)
     registry_deinit(&state.framebuffer_registry)
     registry_deinit(&state.command_pool_registry)
     registry_deinit(&state.pipeline_registry)
@@ -187,6 +194,24 @@ create_framebuffer :: proc(state: graphics.Device_State, spec: graphics.Framebuf
     resource_push_framebuffer(
         &state.resource_loading_queue, 
         &state.framebuffer_registry,
+        handle,
+    )
+
+    return handle
+}
+
+create_buffer :: proc(state: graphics.Device_State) -> graphics.Buffer_Handle {
+    state := cast(^Device_State)state
+
+    handle : graphics.Buffer_Handle = registry_allocate(&state.buffer_registry, 
+        Buffer_Data{
+            0,
+        }
+    )
+
+    resource_push_buffer(
+        &state.resource_loading_queue, 
+        &state.buffer_registry,
         handle,
     )
 

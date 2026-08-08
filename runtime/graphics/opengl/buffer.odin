@@ -11,8 +11,13 @@ Bind_Pipeline_Data :: struct {
     handle: graphics.Pipeline_Handle,
 }
 
+Bind_Framebuffer_Data :: struct {
+    handle: graphics.Framebuffer_Handle,
+}
+
 Command_Opcode :: enum {
     BindPipeline = 0,
+    BindFramebuffer,
 }
 
 command_buffer_init :: proc(state: ^Device_State, buffer: ^Command_Buffer_State, pool: graphics.Command_Pool_Handle) {
@@ -46,3 +51,10 @@ bind_pipeline :: proc(buffer: graphics.Command_Buffer_State, handle: graphics.Pi
     data := command_buffer_push_command(buffer, .BindPipeline, Bind_Pipeline_Data)
     data.handle = handle
 }
+
+bind_framebuffer :: proc(state: graphics.Command_Buffer_State, framebuffer: graphics.Framebuffer_Handle) {
+    buffer := cast(^Command_Buffer_State)state
+    data := command_buffer_push_command(buffer, .BindFramebuffer, Bind_Framebuffer_Data)
+    data.handle = framebuffer
+}
+

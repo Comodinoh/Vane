@@ -16,6 +16,7 @@ Loading_Opcode :: enum(u8) {
     CreateShaderFromBinary,
     CreatePipeline,
     CreateFramebuffer,
+    CreateBuffer,
 }
 
 Resource_Loading_Queue :: struct {
@@ -47,6 +48,8 @@ Create_Framebuffer_Data :: struct {
     using data: ^Framebuffer_Data,
     handle: graphics.Framebuffer_Handle,
 }
+
+Create_Buffer_Data :: distinct Create_Data(graphics.Buffer_Handle, Buffer_Data)
 
 resource_loading_queue_init :: proc(queue: ^Resource_Loading_Queue, allocator: mem.Allocator) {
     queue.allocator = allocator
@@ -167,6 +170,23 @@ resource_push_framebuffer :: proc(queue: ^Resource_Loading_Queue, registry: ^Reg
     data := registry_get(registry, handle.(int))
 
     create_data := Create_Framebuffer_Data{
+        handle = handle,
+        data = data,
+    }
+
+    idx := len(queue.queue)
+
+    resize(&queue.queue, idx + size_of(create_data))
+    copy(queue.queue[idx:], slice.from_ptr(cast(^u8)&create_data, size_of(create_data)))
+}
+
+resource_push_buffer ::  proc(queue: ^Resource_Loading_Queue, registry: ^Registry(Buffer_Data), handle: graphics.Buffer_Handle) {
+    append(&queue.queue, cast(u8)Loading_Opcode.CreateBuffer)
+    align(&queue.queue, align_of(Create_Buffer_Data))
+
+    data := registry_get(registry, handle.(int))
+
+    create_data := Create_Buffer_Data{
         handle = handle,
         data = data,
     }
@@ -304,7 +324,7 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
                         0,
                         0,
                         i32(create_data.size.x),
-                        gl.RGBA8,
+                        gl.RGB,
                         get_data_type(create_data.data_format),
                         create_data.payload
                     )
@@ -325,7 +345,7 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
                         0,
                         i32(create_data.size.x),
                         i32(create_data.size.y),
-                        gl.RGBA8,
+                        gl.RGB,
                         get_data_type(create_data.data_format),
                         create_data.payload
                     )
@@ -349,7 +369,7 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
                         i32(create_data.size.x),
                         i32(create_data.size.y),
                         i32(create_data.size.z),
-                        gl.RGBA8,
+                        gl.RGB,
                         get_data_type(create_data.data_format),
                         create_data.payload
                     )
@@ -404,6 +424,19 @@ resource_decode_and_execute :: proc(queue: ^Resource_Loading_Queue, device: ^Dev
             }
 
             create_data.data.gl_handle = fb
+         }
+         case .CreateBuffer: {
+            idx = uint(mem.align_forward_int(int(idx), align_of(Create_Buffer_Data)))
+
+            create_data := cast(^Create_Buffer_Data)&buffer[idx]
+
+            idx += size_of(Create_Buffer_Data)
+
+            buffer_obj : u32
+
+            gl.CreateBuffers(1, transmute([^]u32)&buffer_obj)
+
+            create_data.data.gl_handle = buffer_obj
          }
         }
     }

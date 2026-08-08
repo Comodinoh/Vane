@@ -27,6 +27,7 @@ register :: proc() {
         create_pipeline = create_pipeline,
         create_command_pool = create_command_pool,
         create_framebuffer = create_framebuffer,
+        create_buffer = create_buffer,
 
         destroy_command_pool = destroy_command_pool,
 

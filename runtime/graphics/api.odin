@@ -65,6 +65,7 @@ Shader_Handle :: distinct Handle
 Pipeline_Handle :: distinct Handle
 Command_Pool_Handle :: distinct Handle
 Framebuffer_Handle :: distinct Handle
+Buffer_Handle :: distinct Handle
 
 Device_State :: rawptr
 Command_Buffer_State :: rawptr
@@ -73,6 +74,7 @@ Fence_State :: rawptr
 
 Command_Buffer :: struct {
     bind_pipeline: proc(state: Command_Buffer_State, pipeline: Pipeline_Handle),
+    bind_framebuffer: proc(state: Command_Buffer_State, framebuffer: Framebuffer_Handle),
 
     clear: proc(state: Command_Buffer_State),
 }
@@ -106,6 +108,7 @@ Device :: struct {
     create_pipeline: proc(state: Device_State, spec: Pipeline_Spec) -> Pipeline_Handle,
     create_command_pool: proc(state: Device_State) -> Command_Pool_Handle,
     create_framebuffer: proc(state: Device_State, spec: Framebuffer_Spec) -> Framebuffer_Handle,
+    create_buffer: proc(state: Device_State) -> Buffer_Handle,
 
     destroy_command_pool: proc(state: Device_State, pool: Command_Pool_Handle),
 
@@ -163,6 +166,10 @@ create_framebuffer :: proc(state: Device_State, spec: Framebuffer_Spec) -> Frame
     return DEVICE_VTABLE[backend.get_backend()].create_framebuffer(state, spec)
 }
 
+create_buffer :: proc(state: Device_State) -> Buffer_Handle {
+    return DEVICE_VTABLE[backend.get_backend()].create_buffer(state)
+}
+
 destroy_command_pool :: proc(state: Device_State, pool: Command_Pool_Handle) {
     DEVICE_VTABLE[backend.get_backend()].destroy_command_pool(state, pool)
 }
@@ -213,6 +220,10 @@ fence_signal :: proc(fence: Fence_State) {
 
 bind_pipeline :: proc(buffer: Command_Buffer_State, handle: Pipeline_Handle) {
     COMMAND_BUFFER_VTABLE[backend.get_backend()].bind_pipeline(buffer, handle)
+}
+
+bind_framebuffer :: proc(state: Command_Buffer_State, framebuffer: Framebuffer_Handle) {
+    COMMAND_BUFFER_VTABLE[backend.get_backend()].bind_framebuffer(state, framebuffer)
 }
 
 command_buffer_clear :: proc(buffer: Command_Buffer_State) {

@@ -1,8 +1,12 @@
 package Graphics_OpenGL
+
 import "vane:graphics"
 import "vane:container"
 import "vane:renderer"
+
 import "core:mem"
+
+import gl "vendor:OpenGL"
 
 Command_Queue_State :: struct {
     buffer: ^container.Atomic_Ring_Buffer(^Command_Buffer_State, renderer.FRAMES_IN_FLIGHT*6),
@@ -37,7 +41,7 @@ submit_buffer :: proc(queue: graphics.Command_Queue_State, buffer: ^graphics.Com
     return res
 }
 
-decode_and_execute_commands :: proc(buffer: ^Command_Buffer_State) {
+decode_and_execute_commands :: proc(buffer: ^Command_Buffer_State, device: ^Device_State) {
     buffer := buffer.buffer[:]
 
     idx := 0
@@ -54,6 +58,22 @@ decode_and_execute_commands :: proc(buffer: ^Command_Buffer_State) {
                 pipeline_data := cast(^Bind_Pipeline_Data)&buffer[idx]
 
                 idx += size_of(Bind_Pipeline_Data)
+
+                gl.UseProgram(
+                    registry_get(&device.pipeline_registry, pipeline_data.handle).program_gl_handle
+                )
+            }
+            case .BindFramebuffer: {
+                idx = mem.align_forward_int(idx, align_of(Bind_Framebuffer_Data))
+
+                fb_data := cast(^Bind_Framebuffer_Data)&buffer[idx]
+
+                idx += size_of(Bind_Framebuffer_Data)
+
+                gl.BindFramebuffer(
+                    gl.FRAMEBUFFER, 
+                    registry_get(&device.framebuffer_registry, fb_data.handle).gl_handle
+                )
             }
         }
     }
@@ -65,7 +85,7 @@ execute :: proc(queue: graphics.Command_Queue_State, fence: graphics.Fence_State
     device := queue.device
     
     for cmd, ok := container.arb_pop(queue.buffer); ok; cmd, ok = container.arb_pop(queue.buffer) {
-        decode_and_execute_commands(cmd^)
+        decode_and_execute_commands(cmd^, device)
     }
 
     #force_inline fence_signal(fence)
